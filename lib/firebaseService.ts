@@ -1,13 +1,13 @@
-import { 
-  collection, 
-  doc, 
-  getDocs, 
-  getDoc, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  query, 
-  orderBy, 
+import {
+  collection,
+  doc,
+  getDocs,
+  getDoc,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  query,
+  orderBy,
   where,
   increment
 } from 'firebase/firestore';
@@ -26,7 +26,10 @@ export const playersService = {
   async getAll(): Promise<Player[]> {
     try {
       const querySnapshot = await getDocs(collection(db, PLAYERS_COLLECTION));
-      return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Player));
+      return querySnapshot.docs.map(doc => {
+        const data = doc.data() as Omit<Player, 'id'>;
+        return { ...data, id: doc.id } as Player;
+      });
     } catch (error) {
       console.error('Error fetching players:', error);
       return [];
@@ -37,7 +40,11 @@ export const playersService = {
     try {
       const docRef = doc(db, PLAYERS_COLLECTION, id);
       const docSnap = await getDoc(docRef);
-      return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } as Player : null;
+      if (docSnap.exists()) {
+        const data = docSnap.data() as Omit<Player, 'id'>;
+        return { ...data, id: docSnap.id } as Player;
+      }
+      return null;
     } catch (error) {
       console.error('Error fetching player:', error);
       return null;
@@ -81,7 +88,10 @@ export const teamsService = {
   async getAll(): Promise<Team[]> {
     try {
       const querySnapshot = await getDocs(collection(db, TEAMS_COLLECTION));
-      return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Team));
+      return querySnapshot.docs.map(doc => {
+        const data = doc.data() as Omit<Team, 'id'>;
+        return { ...data, id: doc.id } as Team;
+      });
     } catch (error) {
       console.error('Error fetching teams:', error);
       return [];
@@ -106,7 +116,10 @@ export const gamesService = {
     try {
       const q = query(collection(db, GAMES_COLLECTION), orderBy('gameNumber', 'asc'));
       const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as GameData));
+      return querySnapshot.docs.map(doc => {
+        const data = doc.data() as Omit<GameData, 'id'>;
+        return { ...data, id: doc.id } as GameData;
+      });
     } catch (error) {
       console.error('Error fetching games:', error);
       return [];
@@ -117,7 +130,11 @@ export const gamesService = {
     try {
       const docRef = doc(db, GAMES_COLLECTION, id);
       const docSnap = await getDoc(docRef);
-      return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } as GameData : null;
+      if (docSnap.exists()) {
+        const data = docSnap.data() as Omit<GameData, 'id'>;
+        return { ...data, id: docSnap.id } as GameData;
+      }
+      return null;
     } catch (error) {
       console.error('Error fetching game:', error);
       return null;
@@ -162,11 +179,11 @@ export const mvpVotingService = {
     try {
       // Check if user has already voted
       const q = query(
-        collection(db, MVP_VOTES_COLLECTION), 
+        collection(db, MVP_VOTES_COLLECTION),
         where('voterEmail', '==', voterEmail)
       );
       const existingVotes = await getDocs(q);
-      
+
       if (!existingVotes.empty) {
         console.log('User has already voted');
         return false;
@@ -191,7 +208,7 @@ export const mvpVotingService = {
     try {
       const querySnapshot = await getDocs(collection(db, MVP_VOTES_COLLECTION));
       const votes: Record<string, number> = {};
-      
+
       querySnapshot.docs.forEach(doc => {
         const data = doc.data();
         votes[data.playerName] = (votes[data.playerName] || 0) + 1;
@@ -207,7 +224,7 @@ export const mvpVotingService = {
   async hasUserVoted(voterEmail: string): Promise<boolean> {
     try {
       const q = query(
-        collection(db, MVP_VOTES_COLLECTION), 
+        collection(db, MVP_VOTES_COLLECTION),
         where('voterEmail', '==', voterEmail)
       );
       const querySnapshot = await getDocs(q);
@@ -255,10 +272,10 @@ export const initializeDatabase = async () => {
     }
 
     console.log('Initializing database with default data...');
-    
+
     // Add default players, teams, and games here
     // This would be called once to set up the initial data
-    
+
   } catch (error) {
     console.error('Error initializing database:', error);
   }

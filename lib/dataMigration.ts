@@ -1,4 +1,4 @@
-import { collection, addDoc, getDocs, doc, setDoc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { getAllPlayers, getAllTeams, getAllGames } from './data';
 
@@ -43,7 +43,7 @@ export const migrateDataToFirebase = async () => {
         createdAt: new Date(),
         updatedAt: new Date()
       };
-      
+
       return addDoc(collection(db, PLAYERS_COLLECTION), playerData);
     });
 
@@ -65,7 +65,7 @@ export const migrateDataToFirebase = async () => {
         createdAt: new Date(),
         updatedAt: new Date()
       };
-      
+
       // Use team name as document ID for easier querying
       return setDoc(doc(db, TEAMS_COLLECTION, team.name.toLowerCase().replace(/\s+/g, '-')), teamData);
     });
@@ -93,7 +93,7 @@ export const migrateDataToFirebase = async () => {
         createdAt: new Date(),
         updatedAt: new Date()
       };
-      
+
       return addDoc(collection(db, GAMES_COLLECTION), gameData);
     });
 
@@ -114,16 +114,16 @@ export const migrateDataToFirebase = async () => {
     console.log('✅ Initial settings configured');
 
     console.log('🎉 Data migration completed successfully!');
-    return { 
-      success: true, 
-      message: `Successfully migrated ${players.length} players, ${teams.length} teams, and ${games.length} games to Firebase!` 
+    return {
+      success: true,
+      message: `Successfully migrated ${players.length} players, ${teams.length} teams, and ${games.length} games to Firebase!`
     };
 
   } catch (error) {
     console.error('❌ Error during data migration:', error);
-    return { 
-      success: false, 
-      message: `Migration failed: ${error instanceof Error ? error.message : 'Unknown error'}` 
+    return {
+      success: false,
+      message: `Migration failed: ${error instanceof Error ? error.message : 'Unknown error'}`
     };
   }
 };
@@ -156,17 +156,17 @@ export const checkFirebaseData = async () => {
 export const clearFirebaseData = async () => {
   try {
     console.log('🗑️ Clearing Firebase data...');
-    
+
     // This is a simple implementation - in production you'd want batch operations
     const collections = [PLAYERS_COLLECTION, TEAMS_COLLECTION, GAMES_COLLECTION];
-    
+
     for (const collectionName of collections) {
       const snapshot = await getDocs(collection(db, collectionName));
-      const deletePromises = snapshot.docs.map(doc => doc.ref.delete());
+      const deletePromises = snapshot.docs.map(docSnapshot => deleteDoc(docSnapshot.ref));
       await Promise.all(deletePromises);
       console.log(`✅ Cleared ${collectionName}`);
     }
-    
+
     return { success: true, message: 'All data cleared successfully' };
   } catch (error) {
     console.error('Error clearing data:', error);

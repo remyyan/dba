@@ -1,4 +1,5 @@
 export interface Player {
+  id?: string;
   name: string;
   team: string;
   points: number;
@@ -17,6 +18,7 @@ export interface Player {
 }
 
 export interface Team {
+  id?: string;
   name: string;
   players: Player[];
   wins: number;
@@ -33,6 +35,7 @@ export interface GameRecord {
 }
 
 export interface GameData {
+  id?: string;
   gameNumber: number;
   date: string;
   team1Score: number;
