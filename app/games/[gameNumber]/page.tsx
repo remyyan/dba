@@ -3,15 +3,16 @@ import { getGame } from "@/lib/data";
 import { notFound } from "next/navigation";
 
 interface GameDetailProps {
-  params: {
+  params: Promise<{
     gameNumber: string;
-  };
+  }>;
 }
 
-export default function GameDetail({ params }: GameDetailProps) {
-  const gameNumber = parseInt(params.gameNumber);
+export default async function GameDetail({ params }: GameDetailProps) {
+  const { gameNumber: gameNumberStr } = await params;
+  const gameNumber = parseInt(gameNumberStr);
   const game = getGame(gameNumber);
-  
+
   if (!game) {
     notFound();
   }
@@ -135,7 +136,7 @@ export default function GameDetail({ params }: GameDetailProps) {
       <section className="py-8 px-4 bg-black/20">
         <div className="max-w-6xl mx-auto">
           <h2 className="text-3xl font-bold text-white mb-8 text-center">Player Statistics</h2>
-          
+
           <div className="grid lg:grid-cols-2 gap-8">
             {/* Golden Dragons Stats */}
             <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 overflow-hidden">
@@ -206,7 +207,7 @@ export default function GameDetail({ params }: GameDetailProps) {
       <section className="py-16 px-4">
         <div className="max-w-6xl mx-auto">
           <h2 className="text-3xl font-bold text-white mb-8 text-center">Game Summary</h2>
-          
+
           <div className="bg-white/10 backdrop-blur-sm rounded-xl p-8 border border-white/20">
             <div className="grid md:grid-cols-3 gap-8">
               <div className="text-center">
@@ -222,7 +223,7 @@ export default function GameDetail({ params }: GameDetailProps) {
                   );
                 })()}
               </div>
-              
+
               <div className="text-center">
                 <h3 className="text-lg font-bold text-orange-400 mb-2">Leading Rebounder</h3>
                 {(() => {
@@ -236,7 +237,7 @@ export default function GameDetail({ params }: GameDetailProps) {
                   );
                 })()}
               </div>
-              
+
               <div className="text-center">
                 <h3 className="text-lg font-bold text-orange-400 mb-2">Most Assists</h3>
                 {(() => {
@@ -259,13 +260,13 @@ export default function GameDetail({ params }: GameDetailProps) {
       <section className="py-8 px-4">
         <div className="max-w-6xl mx-auto text-center">
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link 
-              href="/games" 
+            <Link
+              href="/games"
               className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
             >
               ← Back to All Games
             </Link>
-            <Link 
+            <Link
               href="/standings"
               className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
             >

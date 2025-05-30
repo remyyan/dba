@@ -2,65 +2,99 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { getAllPlayers, updateMVPVotes, getMVPLeaderboard } from "@/lib/data";
+import { getAllPlayers } from "@/lib/data";
+import { mvpVotingService } from "@/lib/firebaseService";
+import { useAuth } from "@/contexts/AuthContext";
+import Navigation from "@/components/Navigation";
 
 export default function MVPVotingPage() {
+  const { user } = useAuth();
   const [players, setPlayers] = useState(getAllPlayers().filter(p => p.points > 0));
-  const [leaderboard, setLeaderboard] = useState(getMVPLeaderboard());
   const [selectedPlayer, setSelectedPlayer] = useState<string>("");
   const [hasVoted, setHasVoted] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [voteCounts, setVoteCounts] = useState<Record<string, number>>({});
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Check if user has already voted (using localStorage)
-    const voted = localStorage.getItem('dba-mvp-voted');
-    if (voted) {
-      setHasVoted(true);
-      setShowResults(true);
+    loadVotingData();
+  }, [user]);
+
+  const loadVotingData = async () => {
+    try {
+      // Load vote counts
+      const counts = await mvpVotingService.getVoteCounts();
+      setVoteCounts(counts);
+
+      // Check if current user has voted
+      if (user?.email) {
+        const userHasVoted = await mvpVotingService.hasUserVoted(user.email);
+        setHasVoted(userHasVoted);
+        if (userHasVoted) {
+          setShowResults(true);
+        }
+      } else {
+        // For non-logged in users, check localStorage
+        const voted = localStorage.getItem('dba-mvp-voted');
+        if (voted) {
+          setHasVoted(true);
+          setShowResults(true);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading voting data:', error);
     }
-  }, []);
-
-  const handleVote = () => {
-    if (!selectedPlayer || hasVoted) return;
-
-    // Update the vote
-    updateMVPVotes(selectedPlayer);
-    
-    // Update local state
-    setLeaderboard(getMVPLeaderboard());
-    setHasVoted(true);
-    setShowResults(true);
-    
-    // Store in localStorage to prevent multiple votes
-    localStorage.setItem('dba-mvp-voted', 'true');
-    localStorage.setItem('dba-mvp-vote-for', selectedPlayer);
   };
 
-  const totalVotes = leaderboard.reduce((sum, player) => sum + (player.mvpVotes || 0), 0);
+  const handleVote = async () => {
+    if (!selectedPlayer || hasVoted || loading) return;
+
+    setLoading(true);
+    try {
+      let success = false;
+
+      if (user?.email) {
+        // Authenticated user - use Firebase
+        success = await mvpVotingService.vote(selectedPlayer, user.email);
+      } else {
+        // Non-authenticated user - use localStorage (less secure but allows public voting)
+        const voted = localStorage.getItem('dba-mvp-voted');
+        if (!voted) {
+          localStorage.setItem('dba-mvp-voted', 'true');
+          localStorage.setItem('dba-mvp-vote-for', selectedPlayer);
+          success = true;
+        }
+      }
+
+      if (success) {
+        setHasVoted(true);
+        setShowResults(true);
+        // Reload vote counts
+        await loadVotingData();
+      } else {
+        alert('You have already voted or there was an error processing your vote.');
+      }
+    } catch (error) {
+      console.error('Error voting:', error);
+      alert('There was an error processing your vote. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const totalVotes = Object.values(voteCounts).reduce((sum, count) => sum + count, 0);
+
+  // Create leaderboard from vote counts
+  const leaderboard = players
+    .map(player => ({
+      ...player,
+      votes: voteCounts[player.name] || 0
+    }))
+    .sort((a, b) => b.votes - a.votes);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
-      {/* Header */}
-      <header className="bg-black/20 backdrop-blur-sm border-b border-white/10">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <Link href="/" className="text-3xl font-bold text-white hover:text-orange-400 transition-colors">
-                <span className="text-orange-400">DBA</span> League
-              </Link>
-              <span className="text-gray-300 text-sm">MVP Voting</span>
-            </div>
-            <nav className="hidden md:flex space-x-6">
-              <Link href="/" className="text-white hover:text-orange-400 transition-colors">Home</Link>
-              <Link href="/teams" className="text-white hover:text-orange-400 transition-colors">Teams</Link>
-              <Link href="/players" className="text-white hover:text-orange-400 transition-colors">Players</Link>
-              <Link href="/standings" className="text-white hover:text-orange-400 transition-colors">Standings</Link>
-              <Link href="/mvp-voting" className="text-orange-400 font-semibold">MVP Voting</Link>
-              <Link href="/records" className="text-white hover:text-orange-400 transition-colors">Records</Link>
-            </nav>
-          </div>
-        </div>
-      </header>
+      <Navigation />
 
       {/* Page Title */}
       <section className="py-16 px-4">
@@ -77,11 +111,11 @@ export default function MVPVotingPage() {
           {/* Voting Section */}
           <div className="bg-white/10 backdrop-blur-sm rounded-xl p-8 border border-white/20">
             <h2 className="text-2xl font-bold text-white mb-6">Cast Your Vote</h2>
-            
+
             {!hasVoted ? (
               <div className="space-y-6">
                 <p className="text-gray-300">Select the player you believe deserves the MVP award:</p>
-                
+
                 <div className="space-y-3">
                   {players.map((player) => (
                     <label key={player.name} className="flex items-center p-4 bg-white/5 rounded-lg cursor-pointer hover:bg-white/10 transition-colors">
@@ -111,14 +145,14 @@ export default function MVPVotingPage() {
 
                 <button
                   onClick={handleVote}
-                  disabled={!selectedPlayer}
+                  disabled={!selectedPlayer || loading}
                   className={`w-full py-3 px-6 rounded-lg font-semibold transition-colors ${
-                    selectedPlayer 
-                      ? 'bg-orange-500 hover:bg-orange-600 text-white' 
+                    selectedPlayer && !loading
+                      ? 'bg-orange-500 hover:bg-orange-600 text-white'
                       : 'bg-gray-600 text-gray-400 cursor-not-allowed'
                   }`}
                 >
-                  Submit Vote
+                  {loading ? 'Submitting...' : 'Submit Vote'}
                 </button>
               </div>
             ) : (
@@ -154,11 +188,11 @@ export default function MVPVotingPage() {
             {showResults ? (
               <div className="space-y-4">
                 <p className="text-gray-300 mb-4">Total Votes: {totalVotes}</p>
-                
+
                 {leaderboard.map((player, index) => {
-                  const votes = player.mvpVotes || 0;
+                  const votes = player.votes || 0;
                   const percentage = totalVotes > 0 ? (votes / totalVotes) * 100 : 0;
-                  
+
                   return (
                     <div key={player.name} className="space-y-2">
                       <div className="flex items-center justify-between">
@@ -178,9 +212,9 @@ export default function MVPVotingPage() {
                           <p className="text-gray-300 text-sm">{percentage.toFixed(1)}%</p>
                         </div>
                       </div>
-                      
+
                       <div className="w-full bg-gray-700 rounded-full h-2">
-                        <div 
+                        <div
                           className={`h-2 rounded-full transition-all duration-500 ${
                             index === 0 ? 'bg-yellow-500' : 'bg-orange-500'
                           }`}
@@ -216,7 +250,7 @@ export default function MVPVotingPage() {
               <h3 className="font-semibold text-white mb-2">Statistical Excellence</h3>
               <p className="text-gray-300 text-sm">Outstanding individual performance across key statistical categories</p>
             </div>
-            
+
             <div className="text-center">
               <div className="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center mx-auto mb-3">
                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -226,7 +260,7 @@ export default function MVPVotingPage() {
               <h3 className="font-semibold text-white mb-2">Team Impact</h3>
               <p className="text-gray-300 text-sm">Significant contribution to team success and overall performance</p>
             </div>
-            
+
             <div className="text-center">
               <div className="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center mx-auto mb-3">
                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">

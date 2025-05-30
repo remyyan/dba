@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getLeagueData, getTopPerformers } from "@/lib/data";
+import Navigation from "@/components/Navigation";
 
 export default function Home() {
   const { teams, standings } = getLeagueData();
@@ -7,28 +8,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
-      {/* Header */}
-      <header className="bg-black/20 backdrop-blur-sm border-b border-white/10">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <h1 className="text-3xl font-bold text-white">
-                <span className="text-orange-400">DBA</span> League
-              </h1>
-              <span className="text-gray-300 text-sm">Denlow Basketball Association</span>
-            </div>
-            <nav className="hidden md:flex space-x-6">
-              <Link href="/" className="text-white hover:text-orange-400 transition-colors">Home</Link>
-              <Link href="/teams" className="text-white hover:text-orange-400 transition-colors">Teams</Link>
-              <Link href="/players" className="text-white hover:text-orange-400 transition-colors">Players</Link>
-              <Link href="/standings" className="text-white hover:text-orange-400 transition-colors">Standings</Link>
-              <Link href="/games" className="text-white hover:text-orange-400 transition-colors">Games</Link>
-              <Link href="/mvp-voting" className="text-white hover:text-orange-400 transition-colors">MVP Voting</Link>
-              <Link href="/records" className="text-white hover:text-orange-400 transition-colors">Records</Link>
-            </nav>
-          </div>
-        </div>
-      </header>
+      <Navigation />
 
       {/* Hero Section */}
       <section className="relative py-20 px-4">

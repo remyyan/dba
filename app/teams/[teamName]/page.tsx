@@ -3,22 +3,23 @@ import { getTeam, getAllTeams } from "@/lib/data";
 import { notFound } from "next/navigation";
 
 interface TeamProfileProps {
-  params: {
+  params: Promise<{
     teamName: string;
-  };
+  }>;
 }
 
-export default function TeamProfile({ params }: TeamProfileProps) {
-  const teamName = decodeURIComponent(params.teamName);
+export default async function TeamProfile({ params }: TeamProfileProps) {
+  const { teamName: teamNameStr } = await params;
+  const teamName = decodeURIComponent(teamNameStr);
   const team = getTeam(teamName);
-  
+
   if (!team) {
     notFound();
   }
 
   const allTeams = getAllTeams();
   const opponent = allTeams.find(t => t.name !== team.name);
-  
+
   const activePlayers = team.players.filter(p => p.points > 0);
   const teamStats = {
     totalPoints: activePlayers.reduce((sum, p) => sum + p.points, 0),
@@ -74,7 +75,7 @@ export default function TeamProfile({ params }: TeamProfileProps) {
                 <div className="flex-1 text-center md:text-left">
                   <h1 className="text-4xl md:text-5xl font-bold text-white mb-2">{team.name}</h1>
                   <p className="text-xl text-gray-200 mb-4">Denlow Basketball Association</p>
-                  
+
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="text-center">
                       <p className="text-3xl font-bold text-white">{team.wins}</p>
@@ -104,26 +105,26 @@ export default function TeamProfile({ params }: TeamProfileProps) {
       <section className="py-8 px-4">
         <div className="max-w-6xl mx-auto">
           <h2 className="text-3xl font-bold text-white mb-8 text-center">Team Statistics</h2>
-          
+
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20 text-center">
               <h3 className="text-lg font-bold text-orange-400 mb-2">Total Scoring</h3>
               <p className="text-3xl font-bold text-white">{teamStats.totalPoints.toFixed(1)}</p>
               <p className="text-gray-300 text-sm">Points Per Game</p>
             </div>
-            
+
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20 text-center">
               <h3 className="text-lg font-bold text-orange-400 mb-2">Total Rebounding</h3>
               <p className="text-3xl font-bold text-white">{teamStats.totalRebounds.toFixed(1)}</p>
               <p className="text-gray-300 text-sm">Rebounds Per Game</p>
             </div>
-            
+
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20 text-center">
               <h3 className="text-lg font-bold text-orange-400 mb-2">Total Assists</h3>
               <p className="text-3xl font-bold text-white">{teamStats.totalAssists.toFixed(1)}</p>
               <p className="text-gray-300 text-sm">Assists Per Game</p>
             </div>
-            
+
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20 text-center">
               <h3 className="text-lg font-bold text-orange-400 mb-2">Team FG%</h3>
               <p className="text-3xl font-bold text-white">{(teamStats.avgFieldGoal * 100).toFixed(1)}%</p>
@@ -137,7 +138,7 @@ export default function TeamProfile({ params }: TeamProfileProps) {
       <section className="py-8 px-4 bg-black/20">
         <div className="max-w-6xl mx-auto">
           <h2 className="text-3xl font-bold text-white mb-8 text-center">Team Leaders</h2>
-          
+
           <div className="grid md:grid-cols-2 gap-8">
             {/* Leading Scorer */}
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20">
@@ -180,7 +181,7 @@ export default function TeamProfile({ params }: TeamProfileProps) {
       <section className="py-16 px-4">
         <div className="max-w-6xl mx-auto">
           <h2 className="text-3xl font-bold text-white mb-8 text-center">Complete Roster</h2>
-          
+
           <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -206,7 +207,7 @@ export default function TeamProfile({ params }: TeamProfileProps) {
                           </div>
                           <div>
                             {player.points > 0 ? (
-                              <Link 
+                              <Link
                                 href={`/players/${encodeURIComponent(player.name)}`}
                                 className="text-orange-400 hover:text-orange-300 font-semibold"
                               >
@@ -243,7 +244,7 @@ export default function TeamProfile({ params }: TeamProfileProps) {
         <section className="py-16 px-4 bg-black/20">
           <div className="max-w-6xl mx-auto">
             <h2 className="text-3xl font-bold text-white mb-8 text-center">Season Matchup</h2>
-            
+
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-8 border border-white/20">
               <div className="grid md:grid-cols-3 gap-8 items-center">
                 {/* Current Team */}
@@ -266,8 +267,8 @@ export default function TeamProfile({ params }: TeamProfileProps) {
                   <div className="text-4xl font-bold text-orange-400 mb-4">VS</div>
                   <p className="text-gray-300">Season Series</p>
                   <p className="text-white font-semibold">
-                    {team.wins > opponent.wins ? `${team.name} leads` : 
-                     opponent.wins > team.wins ? `${opponent.name} leads` : 'Series tied'} 
+                    {team.wins > opponent.wins ? `${team.name} leads` :
+                     opponent.wins > team.wins ? `${opponent.name} leads` : 'Series tied'}
                     {` ${Math.max(team.wins, opponent.wins)}-${Math.min(team.wins, opponent.wins)}`}
                   </p>
                 </div>
@@ -298,13 +299,13 @@ export default function TeamProfile({ params }: TeamProfileProps) {
       <section className="py-8 px-4">
         <div className="max-w-6xl mx-auto text-center">
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link 
-              href="/teams" 
+            <Link
+              href="/teams"
               className="bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
             >
               ← Back to All Teams
             </Link>
-            <Link 
+            <Link
               href="/standings"
               className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
             >
