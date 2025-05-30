@@ -37,9 +37,9 @@ export default function AdminPanel() {
     },
     {
       title: "Team Management",
-      description: "Manage team rosters, transfers, and team information",
+      description: "Manage rosters, propose trades, and handle transfers",
       href: "/admin/teams",
-      icon: "🏀",
+      icon: "🔄",
       color: "bg-green-600 hover:bg-green-700"
     },
     {

@@ -144,24 +144,46 @@ export default async function GameDetail({ params }: GameDetailProps) {
                 <h3 className="text-xl font-bold text-white">{team1Name}</h3>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-xs">
                   <thead className="bg-white/5">
                     <tr>
-                      <th className="px-3 py-2 text-left text-white font-semibold">Player</th>
-                      <th className="px-3 py-2 text-center text-white font-semibold">PTS</th>
-                      <th className="px-3 py-2 text-center text-white font-semibold">REB</th>
-                      <th className="px-3 py-2 text-center text-white font-semibold">AST</th>
-                      <th className="px-3 py-2 text-center text-white font-semibold">FG%</th>
+                      <th className="px-2 py-2 text-left text-white font-semibold">Player</th>
+                      <th className="px-2 py-2 text-center text-white font-semibold">PTS</th>
+                      <th className="px-2 py-2 text-center text-white font-semibold">REB</th>
+                      <th className="px-2 py-2 text-center text-white font-semibold">AST</th>
+                      <th className="px-2 py-2 text-center text-white font-semibold">FGM</th>
+                      <th className="px-2 py-2 text-center text-white font-semibold">FGA</th>
+                      <th className="px-2 py-2 text-center text-white font-semibold">FG%</th>
+                      <th className="px-2 py-2 text-center text-white font-semibold">3PM</th>
+                      <th className="px-2 py-2 text-center text-white font-semibold">3PA</th>
+                      <th className="px-2 py-2 text-center text-white font-semibold">3P%</th>
+                      <th className="px-2 py-2 text-center text-white font-semibold">FTM</th>
+                      <th className="px-2 py-2 text-center text-white font-semibold">FTA</th>
+                      <th className="px-2 py-2 text-center text-white font-semibold">FT%</th>
+                      <th className="px-2 py-2 text-center text-white font-semibold">STL</th>
+                      <th className="px-2 py-2 text-center text-white font-semibold">BLK</th>
+                      <th className="px-2 py-2 text-center text-white font-semibold">MIN</th>
                     </tr>
                   </thead>
                   <tbody>
                     {game.team1Players.map((player, index) => (
                       <tr key={player.name} className={`border-t border-white/10 ${index % 2 === 0 ? 'bg-white/5' : ''}`}>
-                        <td className="px-3 py-2 text-white font-semibold">{player.name}</td>
-                        <td className="px-3 py-2 text-center text-white">{player.points}</td>
-                        <td className="px-3 py-2 text-center text-white">{player.rebounds}</td>
-                        <td className="px-3 py-2 text-center text-white">{player.assists}</td>
-                        <td className="px-3 py-2 text-center text-white">{(player.fgPercentage * 100).toFixed(0)}%</td>
+                        <td className="px-2 py-2 text-white font-semibold">{player.name}</td>
+                        <td className="px-2 py-2 text-center text-white">{player.points}</td>
+                        <td className="px-2 py-2 text-center text-white">{player.rebounds}</td>
+                        <td className="px-2 py-2 text-center text-white">{player.assists}</td>
+                        <td className="px-2 py-2 text-center text-white">{player.fgm}</td>
+                        <td className="px-2 py-2 text-center text-white">{player.fga}</td>
+                        <td className="px-2 py-2 text-center text-white">{(player.fgPercentage * 100).toFixed(1)}%</td>
+                        <td className="px-2 py-2 text-center text-white">{player.threePM}</td>
+                        <td className="px-2 py-2 text-center text-white">{player.threePA}</td>
+                        <td className="px-2 py-2 text-center text-white">{(player.threePPercentage * 100).toFixed(1)}%</td>
+                        <td className="px-2 py-2 text-center text-white">{player.ftm}</td>
+                        <td className="px-2 py-2 text-center text-white">{player.fta}</td>
+                        <td className="px-2 py-2 text-center text-white">{player.fta > 0 ? (player.ftPercentage * 100).toFixed(1) : '0.0'}%</td>
+                        <td className="px-2 py-2 text-center text-white">{player.steals}</td>
+                        <td className="px-2 py-2 text-center text-white">{player.blocks}</td>
+                        <td className="px-2 py-2 text-center text-white">{player.minutes}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -175,24 +197,46 @@ export default async function GameDetail({ params }: GameDetailProps) {
                 <h3 className="text-xl font-bold text-white">{team2Name}</h3>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-xs">
                   <thead className="bg-white/5">
                     <tr>
-                      <th className="px-3 py-2 text-left text-white font-semibold">Player</th>
-                      <th className="px-3 py-2 text-center text-white font-semibold">PTS</th>
-                      <th className="px-3 py-2 text-center text-white font-semibold">REB</th>
-                      <th className="px-3 py-2 text-center text-white font-semibold">AST</th>
-                      <th className="px-3 py-2 text-center text-white font-semibold">FG%</th>
+                      <th className="px-2 py-2 text-left text-white font-semibold">Player</th>
+                      <th className="px-2 py-2 text-center text-white font-semibold">PTS</th>
+                      <th className="px-2 py-2 text-center text-white font-semibold">REB</th>
+                      <th className="px-2 py-2 text-center text-white font-semibold">AST</th>
+                      <th className="px-2 py-2 text-center text-white font-semibold">FGM</th>
+                      <th className="px-2 py-2 text-center text-white font-semibold">FGA</th>
+                      <th className="px-2 py-2 text-center text-white font-semibold">FG%</th>
+                      <th className="px-2 py-2 text-center text-white font-semibold">3PM</th>
+                      <th className="px-2 py-2 text-center text-white font-semibold">3PA</th>
+                      <th className="px-2 py-2 text-center text-white font-semibold">3P%</th>
+                      <th className="px-2 py-2 text-center text-white font-semibold">FTM</th>
+                      <th className="px-2 py-2 text-center text-white font-semibold">FTA</th>
+                      <th className="px-2 py-2 text-center text-white font-semibold">FT%</th>
+                      <th className="px-2 py-2 text-center text-white font-semibold">STL</th>
+                      <th className="px-2 py-2 text-center text-white font-semibold">BLK</th>
+                      <th className="px-2 py-2 text-center text-white font-semibold">MIN</th>
                     </tr>
                   </thead>
                   <tbody>
                     {game.team2Players.map((player, index) => (
                       <tr key={player.name} className={`border-t border-white/10 ${index % 2 === 0 ? 'bg-white/5' : ''}`}>
-                        <td className="px-3 py-2 text-white font-semibold">{player.name}</td>
-                        <td className="px-3 py-2 text-center text-white">{player.points}</td>
-                        <td className="px-3 py-2 text-center text-white">{player.rebounds}</td>
-                        <td className="px-3 py-2 text-center text-white">{player.assists}</td>
-                        <td className="px-3 py-2 text-center text-white">{(player.fgPercentage * 100).toFixed(0)}%</td>
+                        <td className="px-2 py-2 text-white font-semibold">{player.name}</td>
+                        <td className="px-2 py-2 text-center text-white">{player.points}</td>
+                        <td className="px-2 py-2 text-center text-white">{player.rebounds}</td>
+                        <td className="px-2 py-2 text-center text-white">{player.assists}</td>
+                        <td className="px-2 py-2 text-center text-white">{player.fgm}</td>
+                        <td className="px-2 py-2 text-center text-white">{player.fga}</td>
+                        <td className="px-2 py-2 text-center text-white">{(player.fgPercentage * 100).toFixed(1)}%</td>
+                        <td className="px-2 py-2 text-center text-white">{player.threePM}</td>
+                        <td className="px-2 py-2 text-center text-white">{player.threePA}</td>
+                        <td className="px-2 py-2 text-center text-white">{(player.threePPercentage * 100).toFixed(1)}%</td>
+                        <td className="px-2 py-2 text-center text-white">{player.ftm}</td>
+                        <td className="px-2 py-2 text-center text-white">{player.fta}</td>
+                        <td className="px-2 py-2 text-center text-white">{player.fta > 0 ? (player.ftPercentage * 100).toFixed(1) : '0.0'}%</td>
+                        <td className="px-2 py-2 text-center text-white">{player.steals}</td>
+                        <td className="px-2 py-2 text-center text-white">{player.blocks}</td>
+                        <td className="px-2 py-2 text-center text-white">{player.minutes}</td>
                       </tr>
                     ))}
                   </tbody>

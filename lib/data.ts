@@ -42,6 +42,7 @@ export interface GameData {
   team2Score: number;
   team1Players: GamePlayerStats[];
   team2Players: GamePlayerStats[];
+  status?: string;
   quarters?: {
     q1: { team1: number; team2: number };
     q2: { team1: number; team2: number };
@@ -74,6 +75,24 @@ export interface LeagueRecord {
   value: number | string;
   player: string;
   description: string;
+}
+
+export interface ActivityFeedItem {
+  id: string;
+  type: 'trade' | 'signing' | 'release' | 'game' | 'record' | 'mvp';
+  title: string;
+  description: string;
+  timestamp: Date;
+  players?: string[];
+  teams?: string[];
+  icon: string;
+}
+
+export interface FreeAgent {
+  player: Player;
+  releaseDate: Date;
+  releasedBy: string;
+  reason?: string;
 }
 
 // Raw data from CSV converted to structured format
@@ -551,6 +570,70 @@ const leagueRecords: LeagueRecord[] = [
   }
 ];
 
+// Activity Feed Data
+const activityFeedData: ActivityFeedItem[] = [
+  {
+    id: "1",
+    type: "game",
+    title: "Game 3 Completed",
+    description: "Golden Dragons defeated Los Sigmas 52-50 in a thrilling matchup",
+    timestamp: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000), // 1 day ago
+    teams: ["Golden Dragons", "Los Sigmas"],
+    icon: "🏀"
+  },
+  {
+    id: "2",
+    type: "record",
+    title: "New League Record!",
+    description: "A. Guo set a new single-game scoring record with 100 points",
+    timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
+    players: ["A. Guo"],
+    teams: ["Los Sigmas"],
+    icon: "🔥"
+  },
+  {
+    id: "3",
+    type: "mvp",
+    title: "MVP Voting Opened",
+    description: "Public voting for season MVP is now live",
+    timestamp: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), // 3 days ago
+    icon: "⭐"
+  },
+  {
+    id: "4",
+    type: "game",
+    title: "Game 2 Results",
+    description: "Los Sigmas dominated Golden Dragons 107-81",
+    timestamp: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
+    teams: ["Los Sigmas", "Golden Dragons"],
+    icon: "🏀"
+  },
+  {
+    id: "5",
+    type: "game",
+    title: "Season Opener",
+    description: "Los Sigmas started strong with a 100-82 victory over Golden Dragons",
+    timestamp: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // 1 week ago
+    teams: ["Los Sigmas", "Golden Dragons"],
+    icon: "🏀"
+  }
+];
+
+// Free Agents Pool
+const freeAgentsData: FreeAgent[] = [
+  // Currently no free agents, but this will be populated when players are released
+];
+
+// Add "Free Agents" as a virtual team
+const freeAgentTeam: Team = {
+  name: "Free Agents",
+  players: freeAgentsData.map(fa => ({ ...fa.player, team: "Free Agents" })),
+  wins: 0,
+  losses: 0,
+  winPercentage: 0,
+  color: "gray"
+};
+
 export function getAllPlayers(): Player[] {
   return playersData;
 }
@@ -564,6 +647,10 @@ export function getPlayer(playerName: string): Player | undefined {
 }
 
 export function getAllTeams(): Team[] {
+  return [...teamsData, freeAgentTeam];
+}
+
+export function getActiveTeams(): Team[] {
   return teamsData;
 }
 
@@ -672,4 +759,215 @@ export function getTeamGameStats(teamName: string) {
     avgPointsAllowed: gamesPlayed > 0 ? (totalPointsAllowed / gamesPlayed).toFixed(1) : "0.0",
     gamesPlayed
   };
+}
+
+// Activity Feed Functions
+export function getActivityFeed(): ActivityFeedItem[] {
+  return activityFeedData.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+}
+
+export function addActivityFeedItem(item: Omit<ActivityFeedItem, 'id'>): void {
+  const newItem: ActivityFeedItem = {
+    ...item,
+    id: Date.now().toString()
+  };
+  activityFeedData.unshift(newItem);
+}
+
+// Free Agency Functions
+export function getFreeAgents(): FreeAgent[] {
+  return freeAgentsData;
+}
+
+export function releasePlayer(playerName: string, fromTeam: string, reason?: string): boolean {
+  const playerIndex = playersData.findIndex(p => p.name === playerName && p.team === fromTeam);
+  if (playerIndex === -1) return false;
+
+  const player = playersData[playerIndex];
+
+  // Add to free agents
+  const freeAgent: FreeAgent = {
+    player: { ...player, team: "Free Agents" },
+    releaseDate: new Date(),
+    releasedBy: fromTeam,
+    reason
+  };
+  freeAgentsData.push(freeAgent);
+
+  // Update player's team
+  playersData[playerIndex].team = "Free Agents";
+
+  // Update free agent team
+  freeAgentTeam.players = freeAgentsData.map(fa => fa.player);
+
+  // Add activity feed item
+  addActivityFeedItem({
+    type: 'release',
+    title: `${player.name} Released`,
+    description: `${fromTeam} has released ${player.name}${reason ? ` (${reason})` : ''}`,
+    timestamp: new Date(),
+    players: [player.name],
+    teams: [fromTeam],
+    icon: '📤'
+  });
+
+  return true;
+}
+
+export function signFreeAgent(playerName: string, toTeam: string): boolean {
+  const freeAgentIndex = freeAgentsData.findIndex(fa => fa.player.name === playerName);
+  if (freeAgentIndex === -1) return false;
+
+  const freeAgent = freeAgentsData[freeAgentIndex];
+  const playerIndex = playersData.findIndex(p => p.name === playerName);
+
+  if (playerIndex === -1) return false;
+
+  // Update player's team
+  playersData[playerIndex].team = toTeam;
+
+  // Remove from free agents
+  freeAgentsData.splice(freeAgentIndex, 1);
+
+  // Update free agent team
+  freeAgentTeam.players = freeAgentsData.map(fa => fa.player);
+
+  // Add activity feed item
+  addActivityFeedItem({
+    type: 'signing',
+    title: `${freeAgent.player.name} Signed`,
+    description: `${toTeam} has signed ${freeAgent.player.name} from free agency`,
+    timestamp: new Date(),
+    players: [freeAgent.player.name],
+    teams: [toTeam],
+    icon: '✍️'
+  });
+
+  return true;
+}
+
+export function addTradeActivity(fromTeam: string, toTeam: string, playersOffered: Player[], playersRequested: Player[]): void {
+  const offeredNames = playersOffered.map(p => p.name).join(', ');
+  const requestedNames = playersRequested.map(p => p.name).join(', ');
+
+  addActivityFeedItem({
+    type: 'trade',
+    title: 'Trade Completed',
+    description: `${fromTeam} traded ${offeredNames} to ${toTeam} for ${requestedNames}`,
+    timestamp: new Date(),
+    players: [...playersOffered.map(p => p.name), ...playersRequested.map(p => p.name)],
+    teams: [fromTeam, toTeam],
+    icon: '🔄'
+  });
+}
+
+export function formatTimeAgo(date: Date): string {
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  if (diffInSeconds < 60) return 'Just now';
+  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+  if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
+
+  return date.toLocaleDateString();
+}
+
+// Player Management Functions
+export function addNewPlayer(playerData: Omit<Player, 'id'>): boolean {
+  try {
+    const newPlayer: Player = {
+      ...playerData,
+      id: Date.now().toString()
+    };
+
+    playersData.push(newPlayer);
+
+    // If player is added as free agent, add to free agents list
+    if (playerData.team === 'Free Agents') {
+      const freeAgent: FreeAgent = {
+        player: newPlayer,
+        releaseDate: new Date(),
+        releasedBy: 'System',
+        reason: 'New player added as free agent'
+      };
+      freeAgentsData.push(freeAgent);
+      freeAgentTeam.players = freeAgentsData.map(fa => fa.player);
+
+      // Add activity feed item
+      addActivityFeedItem({
+        type: 'signing',
+        title: `New Free Agent Available`,
+        description: `${newPlayer.name} has been added to the free agent pool`,
+        timestamp: new Date(),
+        players: [newPlayer.name],
+        icon: '🆓'
+      });
+    } else {
+      // Add activity feed item for team signing
+      addActivityFeedItem({
+        type: 'signing',
+        title: `New Player Added`,
+        description: `${newPlayer.name} has joined ${playerData.team}`,
+        timestamp: new Date(),
+        players: [newPlayer.name],
+        teams: [playerData.team],
+        icon: '✍️'
+      });
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error adding player:', error);
+    return false;
+  }
+}
+
+export function updatePlayer(playerName: string, updatedData: Partial<Player>): boolean {
+  try {
+    const playerIndex = playersData.findIndex(p => p.name === playerName);
+    if (playerIndex === -1) return false;
+
+    const oldTeam = playersData[playerIndex].team;
+    playersData[playerIndex] = { ...playersData[playerIndex], ...updatedData };
+
+    // Handle team changes
+    if (updatedData.team && updatedData.team !== oldTeam) {
+      // If moving to free agents
+      if (updatedData.team === 'Free Agents') {
+        const freeAgent: FreeAgent = {
+          player: playersData[playerIndex],
+          releaseDate: new Date(),
+          releasedBy: oldTeam,
+          reason: 'Player transfer'
+        };
+        freeAgentsData.push(freeAgent);
+        freeAgentTeam.players = freeAgentsData.map(fa => fa.player);
+      }
+      // If moving from free agents to a team
+      else if (oldTeam === 'Free Agents') {
+        const freeAgentIndex = freeAgentsData.findIndex(fa => fa.player.name === playerName);
+        if (freeAgentIndex !== -1) {
+          freeAgentsData.splice(freeAgentIndex, 1);
+          freeAgentTeam.players = freeAgentsData.map(fa => fa.player);
+        }
+      }
+
+      // Add activity feed item
+      addActivityFeedItem({
+        type: 'signing',
+        title: `Player Transfer`,
+        description: `${playerName} has moved from ${oldTeam} to ${updatedData.team}`,
+        timestamp: new Date(),
+        players: [playerName],
+        teams: [oldTeam, updatedData.team].filter(t => t !== 'Free Agents'),
+        icon: '🔄'
+      });
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error updating player:', error);
+    return false;
+  }
 }
