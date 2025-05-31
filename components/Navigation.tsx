@@ -56,7 +56,7 @@ export default function Navigation() {
             )}
 
             {/* Team Manager Panel Link */}
-            {isTeamManager && !isAdmin && (
+            {isTeamManager && (
               <Link
                 href="/team-manager"
                 className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg font-medium transition-colors"
@@ -71,7 +71,7 @@ export default function Navigation() {
                 <span className="text-gray-300 text-sm">
                   {user.email}
                   {isAdmin && <span className="text-red-400 ml-1">(Admin)</span>}
-                  {isTeamManager && !isAdmin && <span className="text-blue-400 ml-1">({managedTeam} Manager)</span>}
+                  {isTeamManager && <span className="text-blue-400 ml-1">({managedTeam} Manager)</span>}
                 </span>
                 <button
                   onClick={handleLogout}
@@ -132,7 +132,7 @@ export default function Navigation() {
               )}
 
               {/* Team Manager Panel Link - Mobile */}
-              {isTeamManager && !isAdmin && (
+              {isTeamManager && (
                 <Link
                   href="/team-manager"
                   className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg font-medium transition-colors text-center"
@@ -148,7 +148,7 @@ export default function Navigation() {
                   <p className="text-gray-300 text-sm mb-2">
                     {user.email}
                     {isAdmin && <span className="text-red-400 ml-1">(Admin)</span>}
-                    {isTeamManager && !isAdmin && <span className="text-blue-400 ml-1">({managedTeam} Manager)</span>}
+                    {isTeamManager && <span className="text-blue-400 ml-1">({managedTeam} Manager)</span>}
                   </p>
                   <button
                     onClick={() => {

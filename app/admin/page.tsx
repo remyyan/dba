@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { getAllTeams, getAllPlayers, addNewPlayer, transferPlayer, cleanupQuarterPlayers } from '@/lib/firebase-data';
+import { getAllTeams, getAllPlayers, addNewPlayer, transferPlayer, cleanupQuarterPlayers, cleanupDuplicateTeams, updateTeamRecords } from '@/lib/firebase-data';
 import { addActivity } from '@/lib/activities';
 import { importGameFromCSV } from '@/lib/csv-importer';
 import Navigation from '@/components/Navigation';
@@ -31,22 +31,32 @@ export default function AdminPage() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState('');
 
+  // Load data function
+  const loadData = async () => {
+    try {
+      const [teamsData, playersData] = await Promise.all([
+        getAllTeams(),
+        getAllPlayers()
+      ]);
+      setTeams(teamsData);
+      setPlayers(playersData);
+      console.log('Admin data refreshed:', {
+        teams: teamsData.length,
+        players: playersData.length,
+        playersByTeam: {
+          'Golden Dragons': playersData.filter(p => p.team === 'Golden Dragons').length,
+          'Los Sigmas': playersData.filter(p => p.team === 'Los Sigmas').length,
+          'Free Agent': playersData.filter(p => p.team === 'Free Agent').length
+        }
+      });
+    } catch (error) {
+      console.error('Error loading data:', error);
+      setMessage('Error loading data from Firebase');
+    }
+  };
+
   // Load data on component mount
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        const [teamsData, playersData] = await Promise.all([
-          getAllTeams(),
-          getAllPlayers()
-        ]);
-        setTeams(teamsData);
-        setPlayers(playersData);
-      } catch (error) {
-        console.error('Error loading data:', error);
-        setMessage('Error loading data from Firebase');
-      }
-    };
-
     if (user && isAdmin) {
       loadData();
     }
@@ -257,14 +267,45 @@ export default function AdminPage() {
       setMessage('Successfully removed quarter "players" from database!');
 
       // Reload data
-      const [teamsData, playersData] = await Promise.all([
-        getAllTeams(),
-        getAllPlayers()
-      ]);
-      setTeams(teamsData);
-      setPlayers(playersData);
+      await loadData();
     } catch (error) {
       setMessage('Error cleaning up quarter players.');
+      console.error('Error:', error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCleanupDuplicates = async () => {
+    setSubmitting(true);
+    setMessage('');
+
+    try {
+      await cleanupDuplicateTeams();
+      setMessage('Successfully removed duplicate teams from database!');
+
+      // Reload data
+      await loadData();
+    } catch (error) {
+      setMessage('Error cleaning up duplicate teams.');
+      console.error('Error:', error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleRecalculateRecords = async () => {
+    setSubmitting(true);
+    setMessage('');
+
+    try {
+      await updateTeamRecords();
+      setMessage('Successfully recalculated team records from all games!');
+
+      // Reload data
+      await loadData();
+    } catch (error) {
+      setMessage('Error recalculating team records.');
       console.error('Error:', error);
     } finally {
       setSubmitting(false);
@@ -276,7 +317,16 @@ export default function AdminPage() {
       <Navigation />
 
       <div className="max-w-7xl mx-auto px-4 py-8">
-        <h1 className="text-4xl font-bold text-white mb-8 text-center">DBA Admin Panel</h1>
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-4xl font-bold text-white">DBA Admin Panel</h1>
+          <button
+            onClick={loadData}
+            disabled={submitting}
+            className="bg-blue-500 hover:bg-blue-600 disabled:bg-blue-500/50 text-white px-4 py-2 rounded-lg font-semibold transition-colors"
+          >
+            🔄 Refresh Data
+          </button>
+        </div>
 
         {message && (
           <div className={`mb-6 p-4 rounded-lg ${
@@ -361,15 +411,31 @@ export default function AdminPage() {
                 <div className="mt-6 pt-6 border-t border-white/20">
                   <h4 className="text-white font-semibold mb-2">Database Cleanup</h4>
                   <p className="text-gray-400 text-sm mb-3">
-                    Remove incorrectly imported quarter data that was treated as players
+                    Remove incorrectly imported data and duplicates
                   </p>
-                  <button
-                    onClick={handleCleanupQuarters}
-                    disabled={submitting}
-                    className="w-full bg-red-500 hover:bg-red-600 disabled:bg-red-500/50 text-white px-8 py-3 rounded-lg font-semibold transition-colors"
-                  >
-                    {submitting ? 'Cleaning...' : 'Remove Quarter "Players"'}
-                  </button>
+                  <div className="space-y-3">
+                    <button
+                      onClick={handleCleanupQuarters}
+                      disabled={submitting}
+                      className="w-full bg-red-500 hover:bg-red-600 disabled:bg-red-500/50 text-white px-8 py-3 rounded-lg font-semibold transition-colors"
+                    >
+                      {submitting ? 'Cleaning...' : 'Remove Quarter "Players"'}
+                    </button>
+                    <button
+                      onClick={handleCleanupDuplicates}
+                      disabled={submitting}
+                      className="w-full bg-red-500 hover:bg-red-600 disabled:bg-red-500/50 text-white px-8 py-3 rounded-lg font-semibold transition-colors"
+                    >
+                      {submitting ? 'Cleaning...' : 'Remove Duplicate Teams'}
+                    </button>
+                    <button
+                      onClick={handleRecalculateRecords}
+                      disabled={submitting}
+                      className="w-full bg-green-500 hover:bg-green-600 disabled:bg-green-500/50 text-white px-8 py-3 rounded-lg font-semibold transition-colors"
+                    >
+                      {submitting ? 'Calculating...' : 'Recalculate Team Records'}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -510,7 +576,7 @@ export default function AdminPage() {
         {/* Current Rosters */}
         <div className="mt-8 grid md:grid-cols-2 gap-8">
           {['Golden Dragons', 'Los Sigmas'].map((teamName) => {
-            const teamPlayers = players.filter((player: any) => player.team === teamName && player.points > 0);
+            const teamPlayers = players.filter((player: any) => player.team === teamName);
             return (
               <div key={teamName} className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20">
                 <h3 className={`text-xl font-bold mb-4 ${
@@ -521,13 +587,13 @@ export default function AdminPage() {
                 <div className="space-y-2">
                   {teamPlayers.length > 0 ? (
                     teamPlayers.map((player: any) => (
-                      <div key={player.name} className="flex justify-between items-center text-white">
+                      <div key={player.id || player.name} className="flex justify-between items-center text-white">
                         <span>{player.name}</span>
-                        <span className="text-gray-400">{player.points.toFixed(1)} PPG</span>
+                        <span className="text-gray-400">{(player.points || 0).toFixed(1)} PPG</span>
                       </div>
                     ))
                   ) : (
-                    <p className="text-gray-400 text-sm">No players found</p>
+                    <p className="text-gray-400 text-sm">No players found for {teamName}</p>
                   )}
                 </div>
               </div>

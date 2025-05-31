@@ -2,23 +2,38 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { getAllTeams, getAllGames } from "@/lib/firebase-data";
+import { getAllTeams, getAllGames, getAllPlayers } from "@/lib/firebase-data";
 import Navigation from "@/components/Navigation";
 import ActivityFeed from "@/components/ActivityFeed";
 
 export default function Home() {
   const [teams, setTeams] = useState<any[]>([]);
   const [recentGames, setRecentGames] = useState<any[]>([]);
+  const [teamPlayerCounts, setTeamPlayerCounts] = useState<{[key: string]: number}>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [teamsData, gamesData] = await Promise.all([
+        const [teamsData, gamesData, playersData] = await Promise.all([
           getAllTeams(),
-          getAllGames()
+          getAllGames(),
+          getAllPlayers()
         ]);
-        setTeams(teamsData);
+
+        // Remove duplicates if they exist
+        const uniqueTeams = teamsData.filter((team, index, self) =>
+          index === self.findIndex(t => t.name === team.name)
+        );
+
+        // Calculate player counts for each team
+        const playerCounts: {[key: string]: number} = {};
+        for (const team of uniqueTeams) {
+          playerCounts[team.name] = playersData.filter((p: any) => p.team === team.name).length;
+        }
+
+        setTeams(uniqueTeams);
+        setTeamPlayerCounts(playerCounts);
         setRecentGames(gamesData.slice(-3).reverse()); // Last 3 games, most recent first
       } catch (error) {
         console.error('Error loading data:', error);
@@ -77,7 +92,7 @@ export default function Home() {
           <h3 className="text-3xl font-bold text-white mb-8 text-center">Teams</h3>
           <div className="grid md:grid-cols-2 gap-8">
             {teams.map((team) => (
-              <Link key={team.name} href={`/teams/${encodeURIComponent(team.name)}`}>
+              <Link key={team.id || team.name} href={`/teams/${encodeURIComponent(team.name)}`}>
                 <div className={`bg-white/10 backdrop-blur-sm rounded-xl p-8 border border-white/20 hover:bg-white/20 transition-all cursor-pointer ${
                   team.name === 'Golden Dragons' ? 'hover:border-yellow-400' : 'hover:border-red-400'
                 }`}>
@@ -90,7 +105,7 @@ export default function Home() {
                     <h4 className="text-2xl font-bold text-white mb-2">{team.name}</h4>
                     <p className="text-gray-300 text-lg mb-4">{team.wins}-{team.losses} ({team.winPercentage}%)</p>
                     <p className="text-gray-400">
-                      {team.playerIds?.length || 0} Players
+                      {teamPlayerCounts[team.name] || 0} Players
                     </p>
                   </div>
                 </div>

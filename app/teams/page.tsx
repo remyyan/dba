@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { getAllTeams, getPlayersByTeam } from "@/lib/firebase-data";
+import { getAllTeams, getPlayersByTeam, getAllPlayers, createTeam } from "@/lib/firebase-data";
 import Navigation from "@/components/Navigation";
 
 export default function TeamsPage() {
@@ -13,15 +13,51 @@ export default function TeamsPage() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const teamsData = await getAllTeams();
-        setTeams(teamsData);
+        let teamsData = await getAllTeams();
+        console.log('Loaded teams from Firebase:', teamsData);
 
-        // Load players for each team
-        const playersData: {[key: string]: any[]} = {};
-        for (const team of teamsData) {
-          const players = await getPlayersByTeam(team.name);
-          playersData[team.name] = players.filter(p => p.points > 0);
+        // If no teams exist, create default teams
+        if (teamsData.length === 0) {
+          console.log('No teams found, creating default teams...');
+          await createTeam({
+            name: 'Golden Dragons',
+            wins: 0,
+            losses: 0,
+            winPercentage: 0,
+            pointsFor: 0,
+            pointsAgainst: 0,
+            playerIds: []
+          });
+          await createTeam({
+            name: 'Los Sigmas',
+            wins: 0,
+            losses: 0,
+            winPercentage: 0,
+            pointsFor: 0,
+            pointsAgainst: 0,
+            playerIds: []
+          });
+          teamsData = await getAllTeams();
         }
+
+        // Remove duplicates if they exist
+        const uniqueTeams = teamsData.filter((team, index, self) =>
+          index === self.findIndex(t => t.name === team.name)
+        );
+
+        setTeams(uniqueTeams);
+
+        // Load all players and filter by team
+        const allPlayers = await getAllPlayers();
+        console.log('All players:', allPlayers);
+
+        const playersData: {[key: string]: any[]} = {};
+
+        // Create team player arrays
+        playersData['Golden Dragons'] = allPlayers.filter(p => p.team === 'Golden Dragons');
+        playersData['Los Sigmas'] = allPlayers.filter(p => p.team === 'Los Sigmas');
+
+        console.log('Players by team:', playersData);
         setTeamPlayers(playersData);
       } catch (error) {
         console.error('Error loading teams:', error);
@@ -64,7 +100,9 @@ export default function TeamsPage() {
                     {team.name === 'Golden Dragons' ? '🐉' : '🔥'}
                   </div>
                   <h2 className="text-3xl font-bold text-white mb-2">{team.name}</h2>
-                  <p className="text-gray-300 text-xl mb-4">{team.wins}-{team.losses} ({team.winPercentage}%)</p>
+                  <p className="text-gray-300 text-xl mb-4">
+                    {team.wins || 0}-{team.losses || 0} ({Math.round(team.winPercentage || 0)}%)
+                  </p>
                 </div>
 
                 <div className="space-y-4">
@@ -73,13 +111,17 @@ export default function TeamsPage() {
                     <div className="space-y-2">
                       {teamPlayers[team.name]?.length > 0 ? (
                         teamPlayers[team.name].map((player: any) => (
-                          <div key={player.name} className="flex justify-between items-center">
+                          <div key={player.id || player.name} className="flex justify-between items-center">
                             <span className="text-gray-300">{player.name}</span>
-                            <span className="text-white font-semibold">{player.points.toFixed(1)} PPG</span>
+                            <span className="text-white font-semibold">
+                              {(player.points || 0).toFixed(1)} PPG
+                            </span>
                           </div>
                         ))
                       ) : (
-                        <p className="text-gray-400 text-sm">No active players</p>
+                        <p className="text-gray-400 text-sm">
+                          No players found for {team.name}
+                        </p>
                       )}
                     </div>
                   </div>

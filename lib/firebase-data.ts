@@ -259,6 +259,32 @@ export async function cleanupQuarterPlayers(): Promise<void> {
   }
 }
 
+export async function cleanupDuplicateTeams(): Promise<void> {
+  try {
+    const teams = await getAllTeams();
+    const teamNames = new Set<string>();
+    const duplicates: Team[] = [];
+
+    for (const team of teams) {
+      if (teamNames.has(team.name)) {
+        duplicates.push(team);
+      } else {
+        teamNames.add(team.name);
+      }
+    }
+
+    for (const duplicate of duplicates) {
+      if (duplicate.id) {
+        await deleteDoc(doc(db, 'teams', duplicate.id));
+        console.log(`Removed duplicate team: ${duplicate.name}`);
+      }
+    }
+  } catch (error) {
+    console.error('Error cleaning up duplicate teams:', error);
+    throw error;
+  }
+}
+
 // Team Operations
 export async function createTeam(teamData: Omit<Team, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
   try {
@@ -390,4 +416,75 @@ export function calculatePlayerScore(player: GamePlayer): number {
   ) * minutesPlayed;
 
   return Math.round(totalScore * 100) / 100;
+}
+
+export async function updateTeamRecords(): Promise<void> {
+  try {
+    // Get all games and teams
+    const [games, teams] = await Promise.all([
+      getAllGames(),
+      getAllTeams()
+    ]);
+
+    // Calculate records for each team
+    const teamStats: {[teamName: string]: {wins: number, losses: number, pointsFor: number, pointsAgainst: number}} = {};
+
+    // Initialize team stats
+    for (const team of teams) {
+      teamStats[team.name] = {
+        wins: 0,
+        losses: 0,
+        pointsFor: 0,
+        pointsAgainst: 0
+      };
+    }
+
+    // Process each game
+    for (const game of games) {
+      const team1 = game.team1;
+      const team2 = game.team2;
+      const team1Score = game.team1Score;
+      const team2Score = game.team2Score;
+
+      if (teamStats[team1] && teamStats[team2]) {
+        // Add points
+        teamStats[team1].pointsFor += team1Score;
+        teamStats[team1].pointsAgainst += team2Score;
+        teamStats[team2].pointsFor += team2Score;
+        teamStats[team2].pointsAgainst += team1Score;
+
+        // Determine winner
+        if (team1Score > team2Score) {
+          teamStats[team1].wins++;
+          teamStats[team2].losses++;
+        } else if (team2Score > team1Score) {
+          teamStats[team2].wins++;
+          teamStats[team1].losses++;
+        }
+      }
+    }
+
+    // Update each team in Firebase
+    for (const team of teams) {
+      if (team.id && teamStats[team.name]) {
+        const stats = teamStats[team.name];
+        const totalGames = stats.wins + stats.losses;
+        const winPercentage = totalGames > 0 ? Math.round((stats.wins / totalGames) * 100) : 0;
+
+        await updateDoc(doc(db, 'teams', team.id), {
+          wins: stats.wins,
+          losses: stats.losses,
+          winPercentage,
+          pointsFor: stats.pointsFor,
+          pointsAgainst: stats.pointsAgainst,
+          updatedAt: Timestamp.now()
+        });
+
+        console.log(`Updated ${team.name}: ${stats.wins}-${stats.losses} (${winPercentage}%)`);
+      }
+    }
+  } catch (error) {
+    console.error('Error updating team records:', error);
+    throw error;
+  }
 }

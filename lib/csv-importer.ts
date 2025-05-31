@@ -10,7 +10,8 @@ import {
   getAllTeams,
   createTeam,
   calculatePlayerEfficiency,
-  calculatePlayerScore
+  calculatePlayerScore,
+  updateTeamRecords
 } from './firebase-data';
 import { addActivity } from './activities';
 
@@ -382,6 +383,9 @@ export async function importGameFromCSV(csvContent: string, importedBy: string):
 
     // Update player season averages
     await updatePlayerAverages(gameData.players);
+
+    // Update team records based on all games
+    await updateTeamRecords();
 
     // Create activity
     await addActivity({
