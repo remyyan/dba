@@ -100,10 +100,15 @@ export default function AdminPage() {
     setMessage('');
 
     try {
-      // Create the player in Firebase - build data object without undefined values
-      const newPlayerData: any = {
+      // Create the player in Firebase
+      const playerId = await addNewPlayer({
         name: newPlayerName,
         team: newPlayerTeam,
+        position: newPlayerPosition || undefined,
+        height: newPlayerHeight || undefined,
+        weight: newPlayerWeight ? parseInt(newPlayerWeight) : undefined,
+        age: newPlayerAge ? parseInt(newPlayerAge) : undefined,
+        jerseyNumber: newPlayerJerseyNumber ? parseInt(newPlayerJerseyNumber) : undefined,
         gamesPlayed: 0,
         points: 0,
         rebounds: 0,
@@ -122,16 +127,7 @@ export default function AdminPage() {
         ftPercentage: 0,
         efficiency: 0,
         playerScore: 0
-      };
-
-      // Only include optional fields that have values
-      if (newPlayerPosition) newPlayerData.position = newPlayerPosition;
-      if (newPlayerHeight) newPlayerData.height = newPlayerHeight;
-      if (newPlayerWeight) newPlayerData.weight = parseInt(newPlayerWeight);
-      if (newPlayerAge) newPlayerData.age = parseInt(newPlayerAge);
-      if (newPlayerJerseyNumber) newPlayerData.jerseyNumber = parseInt(newPlayerJerseyNumber);
-
-      const playerId = await addNewPlayer(newPlayerData);
+      });
 
       // Create activity
       await addActivity({
@@ -185,20 +181,16 @@ export default function AdminPage() {
     setMessage('');
 
     try {
-      // Update the player in Firebase - filter out undefined values
-      const updateData: any = {
+      // Update the player in Firebase
+      await updatePlayer(selectedPlayer.id, {
         name: editPlayerName,
         team: editPlayerTeam,
-      };
-
-      // Only include fields that have values
-      if (editPlayerPosition) updateData.position = editPlayerPosition;
-      if (editPlayerHeight) updateData.height = editPlayerHeight;
-      if (editPlayerWeight) updateData.weight = parseInt(editPlayerWeight);
-      if (editPlayerAge) updateData.age = parseInt(editPlayerAge);
-      if (editPlayerJerseyNumber) updateData.jerseyNumber = parseInt(editPlayerJerseyNumber);
-
-      await updatePlayer(selectedPlayer.id, updateData);
+        position: editPlayerPosition || undefined,
+        height: editPlayerHeight || undefined,
+        weight: editPlayerWeight ? parseInt(editPlayerWeight) : undefined,
+        age: editPlayerAge ? parseInt(editPlayerAge) : undefined,
+        jerseyNumber: editPlayerJerseyNumber ? parseInt(editPlayerJerseyNumber) : undefined,
+      });
 
       // Create activity
       await addActivity({
