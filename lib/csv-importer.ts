@@ -298,6 +298,9 @@ export async function importGameFromCSV(csvContent: string, importedBy: string):
   try {
     const gameData = parseCSVContent(csvContent);
 
+    // Get existing players to match IDs
+    const existingPlayers = await getAllPlayers();
+
     // Convert CSV players to GamePlayer format
     const team1Players: GamePlayer[] = [];
     const team2Players: GamePlayer[] = [];
@@ -307,8 +310,13 @@ export async function importGameFromCSV(csvContent: string, importedBy: string):
       const threePPercentage = csvPlayer.threePA > 0 ? csvPlayer.threePM / csvPlayer.threePA : 0;
       const ftPercentage = csvPlayer.fta > 0 ? csvPlayer.ftm / csvPlayer.fta : 0;
 
+      // Find matching player ID
+      const existingPlayer = existingPlayers.find(p =>
+        p.name.toLowerCase() === csvPlayer.name.toLowerCase()
+      );
+
       const gamePlayer: GamePlayer = {
-        playerId: '', // Will be filled when we match with existing players
+        playerId: existingPlayer?.id || '', // Use existing player ID if found
         playerName: csvPlayer.name,
         team: csvPlayer.team,
         points: csvPlayer.points,

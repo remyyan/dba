@@ -104,6 +104,38 @@ export default function GamePage({ params }: GamePageProps) {
           </div>
         </div>
 
+        {/* Player of the Game */}
+        {game.playerOfTheGame && (
+          <div className="bg-gradient-to-r from-orange-500/20 to-yellow-500/20 backdrop-blur-sm rounded-xl p-6 border border-orange-500/30 mb-8">
+            <div className="text-center">
+              <h3 className="text-2xl font-bold text-white mb-4 flex items-center justify-center">
+                <span className="text-3xl mr-3">🏆</span>
+                Player of the Game
+              </h3>
+              <div className="flex items-center justify-center space-x-6">
+                <div className={`w-16 h-16 rounded-full flex items-center justify-center text-white font-bold text-2xl ${
+                  game.playerOfTheGame.team === 'Golden Dragons' ? 'bg-yellow-600' : 'bg-red-600'
+                }`}>
+                  {game.playerOfTheGame.playerName.charAt(0)}
+                </div>
+                <div>
+                  <h4 className="text-3xl font-bold text-white">
+                    {game.playerOfTheGame.playerId ? (
+                      <Link href={`/players/${game.playerOfTheGame.playerId}`} className="hover:text-orange-400 transition-colors">
+                        {game.playerOfTheGame.playerName}
+                      </Link>
+                    ) : (
+                      game.playerOfTheGame.playerName
+                    )}
+                  </h4>
+                  <p className="text-lg text-gray-300">{game.playerOfTheGame.team}</p>
+                  <p className="text-orange-400 font-semibold">Game Score: {game.playerOfTheGame.score.toFixed(1)}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Quarter Scores */}
         {game.quarters && (
           <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20 mb-8">
@@ -179,8 +211,16 @@ export default function GamePage({ params }: GamePageProps) {
               </thead>
               <tbody>
                 {game.team1Players.map((player: any) => (
-                  <tr key={player.name} className="border-b border-white/10">
-                    <td className="text-white font-semibold py-2">{player.name}</td>
+                  <tr key={player.playerName || player.name} className="border-b border-white/10">
+                    <td className="text-white font-semibold py-2">
+                      {player.playerId ? (
+                        <Link href={`/players/${player.playerId}`} className="hover:text-orange-400 transition-colors">
+                          {player.playerName || player.name}
+                        </Link>
+                      ) : (
+                        player.playerName || player.name
+                      )}
+                    </td>
                     <td className="text-center text-gray-300 py-2">{formatStat(player.points)}</td>
                     <td className="text-center text-gray-300 py-2">{formatStat(player.rebounds)}</td>
                     <td className="text-center text-gray-300 py-2">{formatStat(player.assists)}</td>
@@ -235,8 +275,16 @@ export default function GamePage({ params }: GamePageProps) {
               </thead>
               <tbody>
                 {game.team2Players.map((player: any) => (
-                  <tr key={player.name} className="border-b border-white/10">
-                    <td className="text-white font-semibold py-2">{player.name}</td>
+                  <tr key={player.playerName || player.name} className="border-b border-white/10">
+                    <td className="text-white font-semibold py-2">
+                      {player.playerId ? (
+                        <Link href={`/players/${player.playerId}`} className="hover:text-orange-400 transition-colors">
+                          {player.playerName || player.name}
+                        </Link>
+                      ) : (
+                        player.playerName || player.name
+                      )}
+                    </td>
                     <td className="text-center text-gray-300 py-2">{formatStat(player.points)}</td>
                     <td className="text-center text-gray-300 py-2">{formatStat(player.rebounds)}</td>
                     <td className="text-center text-gray-300 py-2">{formatStat(player.assists)}</td>

@@ -439,14 +439,35 @@ export function calculatePlayerEfficiency(player: GamePlayer): number {
 }
 
 export function calculatePlayerScore(player: GamePlayer): number {
-  // Advanced player scoring system
+  // Enhanced player scoring system with more sophisticated weighting
   const baseScore = player.points * 1.0;
   const reboundScore = player.rebounds * 1.2;
   const assistScore = player.assists * 1.5;
   const stealScore = player.steals * 3.0;
   const blockScore = player.blocks * 3.0;
-  const efficiencyBonus = player.fgPercentage > 0.5 ? player.points * 0.2 : 0;
-  const minutesPlayed = Math.min(player.minutes / 40, 1); // Normalize to 40 minutes
+
+  // Shooting efficiency bonuses/penalties
+  const fgEfficiencyBonus = player.fgPercentage > 0.5 ? player.points * 0.3 :
+                           player.fgPercentage < 0.35 ? player.points * -0.2 : 0;
+  const threePointBonus = player.threePM * 0.5; // Extra credit for 3-pointers
+  const ftEfficiencyBonus = player.ftPercentage > 0.8 ? player.ftm * 0.3 : 0;
+
+  // Volume shooting penalty for poor efficiency
+  const volumePenalty = player.fgPercentage < 0.35 && player.fga > 10 ? -5 : 0;
+
+  // Minutes played factor (normalize to 40 minutes, but don't penalize too much for low minutes)
+  const minutesFactor = Math.min(player.minutes / 35, 1.2); // Cap at 1.2x for overtime games
+  const minimumMinutes = Math.max(player.minutes / 40, 0.3); // Minimum 30% credit even for low minutes
+  const minutesMultiplier = Math.max(minutesFactor, minimumMinutes);
+
+  // Double-double and triple-double bonuses
+  const stats = [player.points, player.rebounds, player.assists, player.steals, player.blocks];
+  const doubleDigitStats = stats.filter(stat => stat >= 10).length;
+  const doubleDoubleBonus = doubleDigitStats >= 2 ? 5 : 0;
+  const tripleDoubleBonus = doubleDigitStats >= 3 ? 15 : 0;
+
+  // Clutch performance bonus (high efficiency with significant contribution)
+  const clutchBonus = (player.points >= 15 && player.fgPercentage > 0.5) ? 3 : 0;
 
   const totalScore = (
     baseScore +
@@ -454,8 +475,14 @@ export function calculatePlayerScore(player: GamePlayer): number {
     assistScore +
     stealScore +
     blockScore +
-    efficiencyBonus
-  ) * minutesPlayed;
+    fgEfficiencyBonus +
+    threePointBonus +
+    ftEfficiencyBonus +
+    volumePenalty +
+    doubleDoubleBonus +
+    tripleDoubleBonus +
+    clutchBonus
+  ) * minutesMultiplier;
 
   return Math.round(totalScore * 100) / 100;
 }
