@@ -29,7 +29,7 @@ export default function Navigation() {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <Link href="/" className="text-3xl font-bold text-white hover:text-orange-400 transition-colors">
-              <span className="text-orange-400">DBA</span> League
+              <span className="text-orange-400">DBA</span>
             </Link>
             <span className="text-gray-300 text-sm hidden sm:block">Denlow Basketball Association</span>
           </div>
