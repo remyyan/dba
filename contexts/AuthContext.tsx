@@ -36,12 +36,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [loading, setLoading] = useState(true);
 
   // Simple admin check - you can make this more sophisticated
-  const isAdmin = !!(user?.email === 'remyan.yc@gmail.com' || user?.email?.includes('admin'));
+  const isAdmin = !!(user?.email === 'remyan.yc@gmail.com');
 
   // Team manager configuration - you can modify these emails
   const teamManagers = {
     'remyan.yc@gmail.com': 'Golden Dragons',
-    'sigmas@dba.com': 'Los Sigmas',
+    '': 'Los Sigmas',
     // Add more team managers here as needed
   };
 
