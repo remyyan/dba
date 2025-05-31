@@ -2,34 +2,15 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { useAuth } from "@/contexts/AuthContext";
-import { getAllTeams, isTeamCaptain } from "@/lib/data";
 
 export default function Navigation() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const { user, logout, isAdmin } = useAuth();
-
-  // Check if user is a team captain
-  const teams = getAllTeams();
-  const isCaptain = user?.email ? teams.some(team => isTeamCaptain(user.email!, team.name)) : false;
 
   const navItems = [
     { href: "/", label: "Home" },
     { href: "/teams", label: "Teams" },
-    { href: "/players", label: "Players" },
-    { href: "/standings", label: "Standings" },
     { href: "/games", label: "Games" },
-    { href: "/mvp-voting", label: "MVP Voting" },
-    { href: "/records", label: "Records" },
   ];
-
-  const handleLogout = async () => {
-    try {
-      await logout();
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
 
   return (
     <header className="bg-black/20 backdrop-blur-sm border-b border-white/10 sticky top-0 z-50">
@@ -53,50 +34,6 @@ export default function Navigation() {
                 {item.label}
               </Link>
             ))}
-
-            {/* Captain Link */}
-            {isCaptain && (
-              <Link
-                href="/captain"
-                className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-1 rounded-lg font-medium transition-colors"
-              >
-                👑 Captain
-              </Link>
-            )}
-
-            {/* Admin Panel Link */}
-            {isAdmin && (
-              <Link
-                href="/admin"
-                className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-lg font-medium transition-colors"
-              >
-                Admin Panel
-              </Link>
-            )}
-
-            {/* Authentication */}
-            {user ? (
-              <div className="flex items-center space-x-4">
-                <span className="text-gray-300 text-sm">
-                  {user.email}
-                  {isCaptain && <span className="text-orange-400 ml-1">(Captain)</span>}
-                  {isAdmin && <span className="text-red-400 ml-1">(Admin)</span>}
-                </span>
-                <button
-                  onClick={handleLogout}
-                  className="text-white hover:text-orange-400 transition-colors font-medium"
-                >
-                  Logout
-                </button>
-              </div>
-            ) : (
-              <Link
-                href="/login"
-                className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-              >
-                Login
-              </Link>
-            )}
           </nav>
 
           {/* Mobile Menu Button */}
@@ -128,56 +65,6 @@ export default function Navigation() {
                   {item.label}
                 </Link>
               ))}
-
-              {/* Captain Link - Mobile */}
-              {isCaptain && (
-                <Link
-                  href="/captain"
-                  className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 rounded-lg font-medium transition-colors text-center"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  👑 Captain
-                </Link>
-              )}
-
-              {/* Admin Panel Link - Mobile */}
-              {isAdmin && (
-                <Link
-                  href="/admin"
-                  className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg font-medium transition-colors text-center"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  Admin Panel
-                </Link>
-              )}
-
-              {/* Authentication - Mobile */}
-              {user ? (
-                <div className="pt-3 border-t border-white/10">
-                  <p className="text-gray-300 text-sm mb-2">
-                    {user.email}
-                    {isCaptain && <span className="text-orange-400 ml-1">(Captain)</span>}
-                    {isAdmin && <span className="text-red-400 ml-1">(Admin)</span>}
-                  </p>
-                  <button
-                    onClick={() => {
-                      handleLogout();
-                      setIsMenuOpen(false);
-                    }}
-                    className="text-white hover:text-orange-400 transition-colors font-medium"
-                  >
-                    Logout
-                  </button>
-                </div>
-              ) : (
-                <Link
-                  href="/login"
-                  className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium transition-colors text-center"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  Login
-                </Link>
-              )}
             </div>
           </nav>
         )}
