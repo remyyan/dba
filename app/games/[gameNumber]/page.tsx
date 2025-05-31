@@ -1,16 +1,49 @@
+"use client";
+
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { getGame } from "@/lib/data";
+import { useState, useEffect } from "react";
+import { getGame } from "@/lib/firebase-data";
 import Navigation from "@/components/Navigation";
 
 interface GamePageProps {
   params: Promise<{ gameNumber: string }>;
 }
 
-export default async function GamePage({ params }: GamePageProps) {
-  const { gameNumber } = await params;
-  const gameNum = parseInt(gameNumber);
-  const game = getGame(gameNum);
+export default function GamePage({ params }: GamePageProps) {
+  const [game, setGame] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+
+  useEffect(() => {
+    const loadGame = async () => {
+      try {
+        const { gameNumber: gameNumStr } = await params;
+        const gameNum = parseInt(gameNumStr);
+
+        const gameData = await getGame(gameNum);
+        setGame(gameData);
+      } catch (error) {
+        console.error('Error loading game:', error);
+        notFound();
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadGame();
+  }, [params]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
+        <Navigation />
+        <div className="flex items-center justify-center min-h-[50vh]">
+          <div className="text-white text-xl">Loading game...</div>
+        </div>
+      </div>
+    );
+  }
 
   if (!game) {
     notFound();
@@ -43,7 +76,7 @@ export default async function GamePage({ params }: GamePageProps) {
                   <div className="w-12 h-12 bg-yellow-600 rounded-full flex items-center justify-center text-lg">
                     🐉
                   </div>
-                  <h2 className="text-2xl font-bold text-white">Golden Dragons</h2>
+                  <h2 className="text-2xl font-bold text-white">{game.team1}</h2>
                 </div>
                 <p className="text-4xl font-bold text-white">{game.team1Score}</p>
               </div>
@@ -52,7 +85,7 @@ export default async function GamePage({ params }: GamePageProps) {
 
               <div className="text-center">
                 <div className="flex items-center space-x-3 mb-2">
-                  <h2 className="text-2xl font-bold text-white">Los Sigmas</h2>
+                  <h2 className="text-2xl font-bold text-white">{game.team2}</h2>
                   <div className="w-12 h-12 bg-red-600 rounded-full flex items-center justify-center text-lg">
                     🔥
                   </div>
@@ -65,7 +98,7 @@ export default async function GamePage({ params }: GamePageProps) {
               <p className={`text-xl font-semibold ${
                 game.team1Score > game.team2Score ? 'text-yellow-400' : 'text-red-400'
               }`}>
-                {game.team1Score > game.team2Score ? 'Golden Dragons Win' : 'Los Sigmas Win'}
+                {game.team1Score > game.team2Score ? `${game.team1} Win` : `${game.team2} Win`}
               </p>
             </div>
           </div>
@@ -89,7 +122,7 @@ export default async function GamePage({ params }: GamePageProps) {
                 </thead>
                 <tbody>
                   <tr className="border-b border-white/10">
-                    <td className="text-white font-semibold py-3">Golden Dragons</td>
+                    <td className="text-white font-semibold py-3">{game.team1}</td>
                     <td className="text-center text-gray-300 py-3">{game.quarters.q1.team1}</td>
                     <td className="text-center text-gray-300 py-3">{game.quarters.q2.team1}</td>
                     <td className="text-center text-gray-300 py-3">
@@ -99,7 +132,7 @@ export default async function GamePage({ params }: GamePageProps) {
                     <td className="text-center text-white font-bold py-3">{game.team1Score}</td>
                   </tr>
                   <tr>
-                    <td className="text-white font-semibold py-3">Los Sigmas</td>
+                    <td className="text-white font-semibold py-3">{game.team2}</td>
                     <td className="text-center text-gray-300 py-3">{game.quarters.q1.team2}</td>
                     <td className="text-center text-gray-300 py-3">{game.quarters.q2.team2}</td>
                     <td className="text-center text-gray-300 py-3">
@@ -120,7 +153,7 @@ export default async function GamePage({ params }: GamePageProps) {
             <div className="w-8 h-8 bg-yellow-600 rounded-full flex items-center justify-center text-sm mr-3">
               🐉
             </div>
-            Golden Dragons
+            {game.team1}
           </h3>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -145,7 +178,7 @@ export default async function GamePage({ params }: GamePageProps) {
                 </tr>
               </thead>
               <tbody>
-                {game.team1Players.map((player) => (
+                {game.team1Players.map((player: any) => (
                   <tr key={player.name} className="border-b border-white/10">
                     <td className="text-white font-semibold py-2">{player.name}</td>
                     <td className="text-center text-gray-300 py-2">{formatStat(player.points)}</td>
@@ -168,6 +201,7 @@ export default async function GamePage({ params }: GamePageProps) {
               </tbody>
             </table>
           </div>
+        </div>
 
         {/* Los Sigmas Box Score */}
         <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20 mb-8">
@@ -175,7 +209,7 @@ export default async function GamePage({ params }: GamePageProps) {
             <div className="w-8 h-8 bg-red-600 rounded-full flex items-center justify-center text-sm mr-3">
               🔥
             </div>
-            Los Sigmas
+            {game.team2}
           </h3>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -200,7 +234,7 @@ export default async function GamePage({ params }: GamePageProps) {
                 </tr>
               </thead>
               <tbody>
-                {game.team2Players.map((player) => (
+                {game.team2Players.map((player: any) => (
                   <tr key={player.name} className="border-b border-white/10">
                     <td className="text-white font-semibold py-2">{player.name}</td>
                     <td className="text-center text-gray-300 py-2">{formatStat(player.points)}</td>

@@ -1,9 +1,39 @@
+"use client";
+
 import Link from "next/link";
-import { getAllGames } from "@/lib/data";
+import { useState, useEffect } from "react";
+import { getAllGames } from "@/lib/firebase-data";
 import Navigation from "@/components/Navigation";
 
 export default function GamesPage() {
-  const games = getAllGames().reverse(); // Most recent first
+  const [games, setGames] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadGames = async () => {
+      try {
+        const gamesData = await getAllGames();
+        setGames(gamesData.reverse()); // Most recent first
+      } catch (error) {
+        console.error('Error loading games:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadGames();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
+        <Navigation />
+        <div className="flex items-center justify-center min-h-[50vh]">
+          <div className="text-white text-xl">Loading games...</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
@@ -11,7 +41,7 @@ export default function GamesPage() {
 
       <div className="max-w-7xl mx-auto px-4 py-8">
         <h1 className="text-4xl font-bold text-white mb-8 text-center">Game History</h1>
-        
+
         <div className="space-y-6">
           {games.map((game) => (
             <Link key={game.gameNumber} href={`/games/${game.gameNumber}`}>
@@ -22,43 +52,47 @@ export default function GamesPage() {
                       <p className="text-sm text-gray-400">Game {game.gameNumber}</p>
                       <p className="text-sm text-gray-400">{game.date}</p>
                     </div>
-                    
+
                     <div className="flex items-center space-x-6">
-                      {/* Golden Dragons */}
+                      {/* Team 1 */}
                       <div className="text-right">
                         <div className="flex items-center space-x-3">
-                          <div className="w-8 h-8 bg-yellow-600 rounded-full flex items-center justify-center text-sm">
-                            🐉
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${
+                            game.team1 === 'Golden Dragons' ? 'bg-yellow-600' : 'bg-red-600'
+                          }`}>
+                            {game.team1 === 'Golden Dragons' ? '🐉' : '🔥'}
                           </div>
                           <div>
-                            <p className="text-white font-semibold">Golden Dragons</p>
+                            <p className="text-white font-semibold">{game.team1}</p>
                             <p className="text-2xl font-bold text-white">{game.team1Score}</p>
                           </div>
                         </div>
                       </div>
-                      
+
                       <div className="text-gray-400 text-xl font-bold">VS</div>
-                      
-                      {/* Los Sigmas */}
+
+                      {/* Team 2 */}
                       <div className="text-left">
                         <div className="flex items-center space-x-3">
                           <div>
-                            <p className="text-white font-semibold">Los Sigmas</p>
+                            <p className="text-white font-semibold">{game.team2}</p>
                             <p className="text-2xl font-bold text-white">{game.team2Score}</p>
                           </div>
-                          <div className="w-8 h-8 bg-red-600 rounded-full flex items-center justify-center text-sm">
-                            🔥
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${
+                            game.team2 === 'Golden Dragons' ? 'bg-yellow-600' : 'bg-red-600'
+                          }`}>
+                            {game.team2 === 'Golden Dragons' ? '🐉' : '🔥'}
                           </div>
                         </div>
                       </div>
                     </div>
                   </div>
-                  
+
                   <div className="text-right">
                     <p className={`text-lg font-semibold ${
                       game.team1Score > game.team2Score ? 'text-yellow-400' : 'text-red-400'
                     }`}>
-                      {game.team1Score > game.team2Score ? 'Golden Dragons Win' : 'Los Sigmas Win'}
+                      {game.team1Score > game.team2Score ? `${game.team1} Win` : `${game.team2} Win`}
                     </p>
                     <p className="text-gray-400 text-sm">View Box Score →</p>
                   </div>

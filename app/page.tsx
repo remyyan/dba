@@ -1,10 +1,42 @@
+"use client";
+
 import Link from "next/link";
-import { getLeagueData, getRecentGames } from "@/lib/data";
+import { useState, useEffect } from "react";
+import { getAllTeams, getAllGames } from "@/lib/firebase-data";
 import Navigation from "@/components/Navigation";
+import ActivityFeed from "@/components/ActivityFeed";
 
 export default function Home() {
-  const { teams } = getLeagueData();
-  const recentGames = getRecentGames().slice(0, 3); // Show last 3 games
+  const [teams, setTeams] = useState<any[]>([]);
+  const [recentGames, setRecentGames] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [teamsData, gamesData] = await Promise.all([
+          getAllTeams(),
+          getAllGames()
+        ]);
+        setTeams(teamsData);
+        setRecentGames(gamesData.slice(-3).reverse()); // Last 3 games, most recent first
+      } catch (error) {
+        console.error('Error loading data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center">
+        <div className="text-white text-xl">Loading DBA data...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
@@ -58,7 +90,7 @@ export default function Home() {
                     <h4 className="text-2xl font-bold text-white mb-2">{team.name}</h4>
                     <p className="text-gray-300 text-lg mb-4">{team.wins}-{team.losses} ({team.winPercentage}%)</p>
                     <p className="text-gray-400">
-                      {team.players.filter(p => p.points > 0).length} Active Players
+                      {team.playerIds?.length || 0} Players
                     </p>
                   </div>
                 </div>
@@ -84,12 +116,12 @@ export default function Home() {
                       </div>
                       <div className="flex items-center space-x-4">
                         <div className="text-right">
-                          <p className="text-white font-semibold">Golden Dragons</p>
+                          <p className="text-white font-semibold">{game.team1}</p>
                           <p className="text-2xl font-bold text-white">{game.team1Score}</p>
                         </div>
                         <div className="text-gray-400 text-xl">vs</div>
                         <div className="text-left">
-                          <p className="text-white font-semibold">Los Sigmas</p>
+                          <p className="text-white font-semibold">{game.team2}</p>
                           <p className="text-2xl font-bold text-white">{game.team2Score}</p>
                         </div>
                       </div>
@@ -98,7 +130,7 @@ export default function Home() {
                       <p className={`text-lg font-semibold ${
                         game.team1Score > game.team2Score ? 'text-yellow-400' : 'text-red-400'
                       }`}>
-                        {game.team1Score > game.team2Score ? 'Golden Dragons Win' : 'Los Sigmas Win'}
+                        {game.team1Score > game.team2Score ? `${game.team1} Win` : `${game.team2} Win`}
                       </p>
                       <p className="text-gray-400 text-sm">View Box Score →</p>
                     </div>
@@ -115,6 +147,14 @@ export default function Home() {
               View All Games
             </Link>
           </div>
+        </div>
+      </section>
+
+      {/* Activity Feed */}
+      <section className="py-16 px-4">
+        <div className="max-w-7xl mx-auto">
+          <h3 className="text-3xl font-bold text-white mb-8 text-center">Recent Activity</h3>
+          <ActivityFeed />
         </div>
       </section>
 
