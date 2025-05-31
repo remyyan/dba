@@ -208,30 +208,8 @@ export async function addNewPlayer(playerData: Omit<Player, 'id' | 'createdAt' |
       }
     }
 
-    // Create new player with default stats
-    const newPlayerData: Omit<Player, 'id' | 'createdAt' | 'updatedAt'> = {
-      name: playerData.name,
-      team: playerData.team,
-      gamesPlayed: 0,
-      points: 0,
-      rebounds: 0,
-      assists: 0,
-      steals: 0,
-      blocks: 0,
-      minutes: 0,
-      fgm: 0,
-      fga: 0,
-      fgPercentage: 0,
-      threePM: 0,
-      threePA: 0,
-      threePPercentage: 0,
-      ftm: 0,
-      fta: 0,
-      ftPercentage: 0,
-      efficiency: 0,
-      playerScore: 0,
-      ...playerData
-    };
+    // Create new player with provided data
+    const newPlayerData: Omit<Player, 'id' | 'createdAt' | 'updatedAt'> = playerData;
 
     return await createPlayer(newPlayerData);
   } catch (error) {
