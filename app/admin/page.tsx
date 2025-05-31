@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { getAllTeams, getAllPlayers, addNewPlayer, transferPlayer, cleanupQuarterPlayers, cleanupDuplicateTeams, updateTeamRecords } from '@/lib/firebase-data';
+import { getAllTeams, getAllPlayers, addNewPlayer, updatePlayer, transferPlayer, cleanupQuarterPlayers, cleanupDuplicateTeams, updateTeamRecords } from '@/lib/firebase-data';
 import { addActivity } from '@/lib/activities';
 import { importGameFromCSV } from '@/lib/csv-importer';
 import Navigation from '@/components/Navigation';
@@ -13,11 +13,25 @@ export default function AdminPage() {
   const router = useRouter();
   const [, setTeams] = useState<any[]>([]);
   const [players, setPlayers] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'add' | 'trade' | 'drop' | 'csv'>('csv');
+  const [activeTab, setActiveTab] = useState<'add' | 'edit' | 'trade' | 'drop' | 'csv'>('csv');
 
   // Form states
   const [newPlayerName, setNewPlayerName] = useState('');
   const [newPlayerTeam, setNewPlayerTeam] = useState('Golden Dragons');
+  const [newPlayerPosition, setNewPlayerPosition] = useState('');
+  const [newPlayerHeight, setNewPlayerHeight] = useState('');
+  const [newPlayerWeight, setNewPlayerWeight] = useState('');
+  const [newPlayerAge, setNewPlayerAge] = useState('');
+  const [newPlayerJerseyNumber, setNewPlayerJerseyNumber] = useState('');
+  // Edit player states
+  const [selectedPlayer, setSelectedPlayer] = useState<any>(null);
+  const [editPlayerName, setEditPlayerName] = useState('');
+  const [editPlayerTeam, setEditPlayerTeam] = useState('');
+  const [editPlayerPosition, setEditPlayerPosition] = useState('');
+  const [editPlayerHeight, setEditPlayerHeight] = useState('');
+  const [editPlayerWeight, setEditPlayerWeight] = useState('');
+  const [editPlayerAge, setEditPlayerAge] = useState('');
+  const [editPlayerJerseyNumber, setEditPlayerJerseyNumber] = useState('');
   const [tradePlayer, setTradePlayer] = useState('');
   const [tradeFromTeam, setTradeFromTeam] = useState('');
   const [tradeToTeam, setTradeToTeam] = useState('');
@@ -86,8 +100,8 @@ export default function AdminPage() {
     setMessage('');
 
     try {
-      // Create the player in Firebase
-      const playerId = await addNewPlayer({
+      // Create the player in Firebase - build data object without undefined values
+      const newPlayerData: any = {
         name: newPlayerName,
         team: newPlayerTeam,
         gamesPlayed: 0,
@@ -108,7 +122,16 @@ export default function AdminPage() {
         ftPercentage: 0,
         efficiency: 0,
         playerScore: 0
-      });
+      };
+
+      // Only include optional fields that have values
+      if (newPlayerPosition) newPlayerData.position = newPlayerPosition;
+      if (newPlayerHeight) newPlayerData.height = newPlayerHeight;
+      if (newPlayerWeight) newPlayerData.weight = parseInt(newPlayerWeight);
+      if (newPlayerAge) newPlayerData.age = parseInt(newPlayerAge);
+      if (newPlayerJerseyNumber) newPlayerData.jerseyNumber = parseInt(newPlayerJerseyNumber);
+
+      const playerId = await addNewPlayer(newPlayerData);
 
       // Create activity
       await addActivity({
@@ -121,6 +144,12 @@ export default function AdminPage() {
 
       setMessage(`Successfully added ${newPlayerName} to ${newPlayerTeam}! Player ID: ${playerId}`);
       setNewPlayerName('');
+      setNewPlayerTeam('Golden Dragons');
+      setNewPlayerPosition('');
+      setNewPlayerHeight('');
+      setNewPlayerWeight('');
+      setNewPlayerAge('');
+      setNewPlayerJerseyNumber('');
 
       // Reload data to reflect changes
       const [teamsData, playersData] = await Promise.all([
@@ -131,6 +160,73 @@ export default function AdminPage() {
       setPlayers(playersData);
     } catch (error) {
       setMessage('Error adding player. Please try again.');
+      console.error('Error:', error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSelectPlayerForEdit = (player: any) => {
+    setSelectedPlayer(player);
+    setEditPlayerName(player.name);
+    setEditPlayerTeam(player.team);
+    setEditPlayerPosition(player.position || '');
+    setEditPlayerHeight(player.height || '');
+    setEditPlayerWeight(player.weight ? player.weight.toString() : '');
+    setEditPlayerAge(player.age ? player.age.toString() : '');
+    setEditPlayerJerseyNumber(player.jerseyNumber ? player.jerseyNumber.toString() : '');
+  };
+
+  const handleEditPlayer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPlayer) return;
+
+    setSubmitting(true);
+    setMessage('');
+
+    try {
+      // Update the player in Firebase - filter out undefined values
+      const updateData: any = {
+        name: editPlayerName,
+        team: editPlayerTeam,
+      };
+
+      // Only include fields that have values
+      if (editPlayerPosition) updateData.position = editPlayerPosition;
+      if (editPlayerHeight) updateData.height = editPlayerHeight;
+      if (editPlayerWeight) updateData.weight = parseInt(editPlayerWeight);
+      if (editPlayerAge) updateData.age = parseInt(editPlayerAge);
+      if (editPlayerJerseyNumber) updateData.jerseyNumber = parseInt(editPlayerJerseyNumber);
+
+      await updatePlayer(selectedPlayer.id, updateData);
+
+      // Create activity
+      await addActivity({
+        type: 'transfer',
+        description: `${editPlayerName} profile updated by admin`,
+        playerName: editPlayerName,
+        details: `Player details updated`
+      });
+
+      setMessage(`Successfully updated ${editPlayerName}!`);
+      setSelectedPlayer(null);
+      setEditPlayerName('');
+      setEditPlayerTeam('');
+      setEditPlayerPosition('');
+      setEditPlayerHeight('');
+      setEditPlayerWeight('');
+      setEditPlayerAge('');
+      setEditPlayerJerseyNumber('');
+
+      // Reload data to reflect changes
+      const [teamsData, playersData] = await Promise.all([
+        getAllTeams(),
+        getAllPlayers()
+      ]);
+      setTeams(teamsData);
+      setPlayers(playersData);
+    } catch (error) {
+      setMessage('Error updating player. Please try again.');
       console.error('Error:', error);
     } finally {
       setSubmitting(false);
@@ -343,6 +439,7 @@ export default function AdminPage() {
           {[
             { key: 'csv', label: 'Import CSV Game', icon: '📊' },
             { key: 'add', label: 'Add Player', icon: '➕' },
+            { key: 'edit', label: 'Edit Player', icon: '✏️' },
             { key: 'trade', label: 'Trade Player', icon: '🔄' },
             { key: 'drop', label: 'Drop Player', icon: '❌' }
           ].map((tab) => (
@@ -468,6 +565,73 @@ export default function AdminPage() {
                     <option value="Free Agent">Free Agent</option>
                   </select>
                 </div>
+
+                {/* Additional Player Information */}
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-white font-medium mb-2">Position</label>
+                    <select
+                      value={newPlayerPosition}
+                      onChange={(e) => setNewPlayerPosition(e.target.value)}
+                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-orange-400"
+                    >
+                      <option value="">Select position</option>
+                      <option value="G">Guard (G)</option>
+                      <option value="F">Forward (F)</option>
+                      <option value="C">Center (C)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-white font-medium mb-2">Jersey Number</label>
+                    <input
+                      type="number"
+                      value={newPlayerJerseyNumber}
+                      onChange={(e) => setNewPlayerJerseyNumber(e.target.value)}
+                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-orange-400"
+                      placeholder="e.g., 23"
+                      min="0"
+                      max="99"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-white font-medium mb-2">Height</label>
+                    <input
+                      type="text"
+                      value={newPlayerHeight}
+                      onChange={(e) => setNewPlayerHeight(e.target.value)}
+                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-orange-400"
+                      placeholder="e.g., 6'2&quot;"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-white font-medium mb-2">Weight (lbs)</label>
+                    <input
+                      type="number"
+                      value={newPlayerWeight}
+                      onChange={(e) => setNewPlayerWeight(e.target.value)}
+                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-orange-400"
+                      placeholder="e.g., 180"
+                      min="100"
+                      max="400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-white font-medium mb-2">Age</label>
+                    <input
+                      type="number"
+                      value={newPlayerAge}
+                      onChange={(e) => setNewPlayerAge(e.target.value)}
+                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-orange-400"
+                      placeholder="e.g., 25"
+                      min="16"
+                      max="50"
+                    />
+                  </div>
+                </div>
+
                 <button
                   type="submit"
                   disabled={submitting}
@@ -476,6 +640,164 @@ export default function AdminPage() {
                   {submitting ? 'Adding...' : 'Add Player'}
                 </button>
               </form>
+            </div>
+          )}
+
+          {activeTab === 'edit' && (
+            <div>
+              <h2 className="text-2xl font-bold text-white mb-6">Edit Player</h2>
+
+              {!selectedPlayer ? (
+                <div>
+                  <h3 className="text-lg font-semibold text-white mb-4">Select a Player to Edit</h3>
+                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {players.map((player: any) => (
+                      <div
+                        key={player.id}
+                        onClick={() => handleSelectPlayerForEdit(player)}
+                        className="bg-white/5 hover:bg-white/10 border border-white/20 rounded-lg p-4 cursor-pointer transition-all"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-white font-medium">{player.name}</h4>
+                          <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                            player.team === 'Golden Dragons' ? 'bg-yellow-600 text-white' :
+                            player.team === 'Los Sigmas' ? 'bg-red-600 text-white' :
+                            'bg-gray-600 text-white'
+                          }`}>
+                            {player.team}
+                          </span>
+                        </div>
+                        <div className="text-gray-400 text-sm">
+                          <div>Position: {player.position || 'N/A'}</div>
+                          <div>PPG: {(player.points || 0).toFixed(1)}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-lg font-semibold text-white">Editing: {selectedPlayer.name}</h3>
+                    <button
+                      onClick={() => setSelectedPlayer(null)}
+                      className="text-gray-400 hover:text-white transition-colors"
+                    >
+                      ← Back to Player List
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleEditPlayer} className="space-y-4">
+                    <div>
+                      <label className="block text-white font-medium mb-2">Player Name</label>
+                      <input
+                        type="text"
+                        value={editPlayerName}
+                        onChange={(e) => setEditPlayerName(e.target.value)}
+                        className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-orange-400"
+                        placeholder="Enter player name"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-white font-medium mb-2">Team</label>
+                      <select
+                        value={editPlayerTeam}
+                        onChange={(e) => setEditPlayerTeam(e.target.value)}
+                        className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-orange-400"
+                      >
+                        <option value="Golden Dragons">Golden Dragons</option>
+                        <option value="Los Sigmas">Los Sigmas</option>
+                        <option value="Free Agent">Free Agent</option>
+                      </select>
+                    </div>
+
+                    {/* Additional Player Information */}
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-white font-medium mb-2">Position</label>
+                        <select
+                          value={editPlayerPosition}
+                          onChange={(e) => setEditPlayerPosition(e.target.value)}
+                          className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-orange-400"
+                        >
+                          <option value="">Select position</option>
+                          <option value="G">Guard (G)</option>
+                          <option value="F">Forward (F)</option>
+                          <option value="C">Center (C)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-white font-medium mb-2">Jersey Number</label>
+                        <input
+                          type="number"
+                          value={editPlayerJerseyNumber}
+                          onChange={(e) => setEditPlayerJerseyNumber(e.target.value)}
+                          className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-orange-400"
+                          placeholder="e.g., 23"
+                          min="0"
+                          max="99"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-white font-medium mb-2">Height</label>
+                        <input
+                          type="text"
+                          value={editPlayerHeight}
+                          onChange={(e) => setEditPlayerHeight(e.target.value)}
+                          className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-orange-400"
+                          placeholder="e.g., 6'2&quot;"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-white font-medium mb-2">Weight (lbs)</label>
+                        <input
+                          type="number"
+                          value={editPlayerWeight}
+                          onChange={(e) => setEditPlayerWeight(e.target.value)}
+                          className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-orange-400"
+                          placeholder="e.g., 180"
+                          min="100"
+                          max="400"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-white font-medium mb-2">Age</label>
+                        <input
+                          type="number"
+                          value={editPlayerAge}
+                          onChange={(e) => setEditPlayerAge(e.target.value)}
+                          className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-orange-400"
+                          placeholder="e.g., 25"
+                          min="16"
+                          max="50"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex gap-4">
+                      <button
+                        type="submit"
+                        disabled={submitting}
+                        className="bg-orange-500 hover:bg-orange-600 disabled:bg-orange-500/50 text-white px-8 py-3 rounded-lg font-semibold transition-colors"
+                      >
+                        {submitting ? 'Updating...' : 'Update Player'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPlayer(null)}
+                        className="bg-gray-500 hover:bg-gray-600 text-white px-8 py-3 rounded-lg font-semibold transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
             </div>
           )}
 

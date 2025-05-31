@@ -20,6 +20,11 @@ export interface Player {
   name: string;
   team: string;
   position?: string;
+  // Physical attributes
+  height?: string; // e.g., "6'2\""
+  weight?: number; // in pounds
+  age?: number;
+  jerseyNumber?: number;
   // Season averages
   gamesPlayed: number;
   points: number;
@@ -136,6 +141,65 @@ export async function getAllPlayers(): Promise<Player[]> {
   } catch (error) {
     console.error('Error fetching players:', error);
     return [];
+  }
+}
+
+export async function getPlayer(playerId: string): Promise<Player | null> {
+  try {
+    const playerRef = doc(db, 'players', playerId);
+    const snapshot = await getDoc(playerRef);
+
+    if (snapshot.exists()) {
+      return {
+        id: snapshot.id,
+        ...snapshot.data()
+      } as Player;
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error getting player:', error);
+    throw error;
+  }
+}
+
+export async function getPlayerGameHistory(playerId: string): Promise<any[]> {
+  try {
+    // Get all games and filter for this player's performances
+    const gamesRef = collection(db, 'games');
+    const snapshot = await getDocs(gamesRef);
+
+    const playerGames: any[] = [];
+
+    snapshot.docs.forEach(doc => {
+      const game = doc.data() as Game;
+
+      // Check team1Players
+      const team1Performance = game.team1Players?.find(p => p.playerId === playerId);
+      if (team1Performance) {
+        playerGames.push({
+          gameNumber: game.gameNumber,
+          date: game.date,
+          ...team1Performance
+        });
+      }
+
+      // Check team2Players
+      const team2Performance = game.team2Players?.find(p => p.playerId === playerId);
+      if (team2Performance) {
+        playerGames.push({
+          gameNumber: game.gameNumber,
+          date: game.date,
+          ...team2Performance
+        });
+      }
+    });
+
+    // Sort by game number
+    return playerGames.sort((a, b) => a.gameNumber - b.gameNumber);
+  } catch (error) {
+    console.error('Error getting player game history:', error);
+    throw error;
   }
 }
 
