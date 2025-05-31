@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { getAllPlayers, addNewPlayer, updatePlayer, Player } from "@/lib/data";
+import { getAllPlayers, addNewPlayer, updatePlayer, Player, PlayerPosition, getPositionColor, getPositionName } from "@/lib/data";
 
 export default function AdminPlayersPage() {
   const { user, isAdmin, loading } = useAuth();
@@ -196,20 +196,31 @@ export default function AdminPlayersPage() {
                       <td className="px-6 py-4">
                         <div className="flex items-center space-x-3">
                           <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                            player.team === 'Golden Dragons'
+                            player.position
+                              ? getPositionColor(player.position)
+                              : player.team === 'Golden Dragons'
                               ? 'bg-yellow-600'
                               : player.team === 'Los Sigmas'
                               ? 'bg-red-600'
                               : 'bg-gray-600'
                           }`}>
                             <span className="text-white font-bold text-sm">
-                              {player.team === 'Free Agents'
-                                ? 'FA'
-                                : player.name.split(' ').map(n => n[0]).join('')
+                              {player.jerseyNumber || player.position ||
+                                (player.team === 'Free Agents'
+                                  ? 'FA'
+                                  : player.name.split(' ').map(n => n[0]).join('')
+                                )
                               }
                             </span>
                           </div>
-                          <span className="text-white font-semibold">{player.name}</span>
+                          <div>
+                            <span className="text-white font-semibold">{player.name}</span>
+                            {player.position && (
+                              <div className="text-gray-300 text-xs">
+                                {getPositionName(player.position)} {player.height && player.weight && `• ${player.height}, ${player.weight}`}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 text-center text-white">{player.team}</td>
@@ -324,6 +335,55 @@ export default function AdminPlayersPage() {
                     <option value="Los Sigmas">Los Sigmas</option>
                     <option value="Free Agents">🆓 Free Agents</option>
                   </select>
+                </div>
+              </div>
+
+              {/* Position and Physical Info */}
+              <div className="grid md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-white font-semibold mb-2">Position</label>
+                  <select
+                    className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
+                    value={formData.position || ''}
+                    onChange={(e) => setFormData({...formData, position: e.target.value as PlayerPosition})}
+                  >
+                    <option value="">Select position...</option>
+                    <option value="G">Guard (G)</option>
+                    <option value="F">Forward (F)</option>
+                    <option value="C">Center (C)</option>
+                    <option value="UTIL">Utility (UTIL)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-white font-semibold mb-2">Jersey #</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="99"
+                    className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
+                    value={formData.jerseyNumber || ''}
+                    onChange={(e) => setFormData({...formData, jerseyNumber: parseInt(e.target.value) || undefined})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-white font-semibold mb-2">Height</label>
+                  <input
+                    type="text"
+                    className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
+                    placeholder="6'2&quot;"
+                    value={formData.height || ''}
+                    onChange={(e) => setFormData({...formData, height: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-white font-semibold mb-2">Weight</label>
+                  <input
+                    type="text"
+                    className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
+                    placeholder="180 lbs"
+                    value={formData.weight || ''}
+                    onChange={(e) => setFormData({...formData, weight: e.target.value})}
+                  />
                 </div>
               </div>
 

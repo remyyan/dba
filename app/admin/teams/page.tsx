@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { getAllTeams, getAllPlayers, Player, Team, getFreeAgents, releasePlayer, signFreeAgent, addTradeActivity } from "@/lib/data";
+import { getAllTeams, getAllPlayers, Player, Team, getFreeAgents, releasePlayer, signFreeAgent, addTradeActivity, appointCaptain, removeCaptain, TeamPermission } from "@/lib/data";
 
 interface Trade {
   id: string;
@@ -30,11 +30,16 @@ export default function AdminTeamsPage() {
   const [playersRequested, setPlayersRequested] = useState<Player[]>([]);
   const [trades, setTrades] = useState<Trade[]>([]);
   const [tradeNotes, setTradeNotes] = useState("");
-  const [activeTab, setActiveTab] = useState<'overview' | 'trades' | 'history' | 'freeagents'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'trades' | 'history' | 'freeagents' | 'captains'>('overview');
   const [freeAgents, setFreeAgents] = useState(getFreeAgents());
   const [showReleaseModal, setShowReleaseModal] = useState(false);
   const [playerToRelease, setPlayerToRelease] = useState<{player: Player, team: string} | null>(null);
   const [releaseReason, setReleaseReason] = useState("");
+  const [showCaptainModal, setShowCaptainModal] = useState(false);
+  const [selectedTeamForCaptain, setSelectedTeamForCaptain] = useState("");
+  const [captainEmail, setCaptainEmail] = useState("");
+  const [captainName, setCaptainName] = useState("");
+  const [captainPermissions, setCaptainPermissions] = useState<TeamPermission[]>([]);
 
   useEffect(() => {
     if (!loading && (!user || !isAdmin)) {
@@ -160,6 +165,40 @@ export default function AdminTeamsPage() {
     }
   };
 
+  const handleAppointCaptain = () => {
+    if (!selectedTeamForCaptain || !captainEmail || !captainName || captainPermissions.length === 0) {
+      alert('Please fill in all captain details and select at least one permission');
+      return;
+    }
+
+    const success = appointCaptain(selectedTeamForCaptain, captainEmail, captainName, captainPermissions);
+    if (success) {
+      setTeams(getAllTeams());
+      setShowCaptainModal(false);
+      setSelectedTeamForCaptain("");
+      setCaptainEmail("");
+      setCaptainName("");
+      setCaptainPermissions([]);
+    }
+  };
+
+  const handleRemoveCaptain = (teamName: string, captainEmail: string) => {
+    if (confirm('Are you sure you want to remove this captain?')) {
+      const success = removeCaptain(teamName, captainEmail);
+      if (success) {
+        setTeams(getAllTeams());
+      }
+    }
+  };
+
+  const togglePermission = (permission: TeamPermission) => {
+    if (captainPermissions.includes(permission)) {
+      setCaptainPermissions(captainPermissions.filter(p => p !== permission));
+    } else {
+      setCaptainPermissions([...captainPermissions, permission]);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
       {/* Header */}
@@ -206,7 +245,8 @@ export default function AdminTeamsPage() {
               { id: 'overview', label: 'Team Overview', icon: '🏀' },
               { id: 'trades', label: 'Active Trades', icon: '🔄' },
               { id: 'history', label: 'Trade History', icon: '📋' },
-              { id: 'freeagents', label: 'Free Agents', icon: '🆓' }
+              { id: 'freeagents', label: 'Free Agents', icon: '🆓' },
+              { id: 'captains', label: 'Team Captains', icon: '👑' }
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -576,6 +616,85 @@ export default function AdminTeamsPage() {
             </div>
           )}
 
+          {/* Team Captains Tab */}
+          {activeTab === 'captains' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-2xl font-bold text-white">Team Captains Management</h3>
+                <button
+                  onClick={() => setShowCaptainModal(true)}
+                  className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
+                >
+                  👑 Appoint Captain
+                </button>
+              </div>
+
+              <div className="grid lg:grid-cols-2 gap-6">
+                {teams.filter(t => t.name !== "Free Agents").map((team) => (
+                  <div key={team.name} className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 overflow-hidden">
+                    <div className={`${team.color === 'red' ? 'bg-red-600/20' : 'bg-yellow-600/20'} p-4`}>
+                      <h4 className="text-xl font-bold text-white">{team.name}</h4>
+                      <p className="text-gray-300">
+                        {team.captains?.length || 0} captain{(team.captains?.length || 0) !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+
+                    <div className="p-4">
+                      {!team.captains || team.captains.length === 0 ? (
+                        <div className="text-center py-8">
+                          <div className="text-4xl mb-2">👑</div>
+                          <p className="text-gray-400 mb-4">No captains appointed</p>
+                          <button
+                            onClick={() => {
+                              setSelectedTeamForCaptain(team.name);
+                              setShowCaptainModal(true);
+                            }}
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm transition-colors"
+                          >
+                            Appoint Captain
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {team.captains.map((captain) => (
+                            <div key={captain.email} className="bg-white/5 p-4 rounded-lg">
+                              <div className="flex items-center justify-between mb-3">
+                                <div>
+                                  <h5 className="text-white font-semibold">{captain.name}</h5>
+                                  <p className="text-gray-300 text-sm">{captain.email}</p>
+                                  <p className="text-gray-400 text-xs">
+                                    Appointed: {captain.appointedDate.toLocaleDateString()}
+                                  </p>
+                                </div>
+                                <button
+                                  onClick={() => handleRemoveCaptain(team.name, captain.email)}
+                                  className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm transition-colors"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+
+                              <div className="flex flex-wrap gap-2">
+                                {captain.permissions.map((permission) => (
+                                  <span
+                                    key={permission}
+                                    className="px-2 py-1 bg-orange-600/20 text-orange-400 rounded text-xs font-semibold"
+                                  >
+                                    {permission.replace('_', ' ').toUpperCase()}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
         </div>
       </section>
 
@@ -757,6 +876,100 @@ export default function AdminTeamsPage() {
                   className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
                 >
                   Release Player
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Captain Appointment Modal */}
+      {showCaptainModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-xl p-6 w-full max-w-md">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-orange-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-orange-400 text-2xl">👑</span>
+              </div>
+
+              <h3 className="text-xl font-bold text-white mb-4">Appoint Team Captain</h3>
+
+              <div className="space-y-4 text-left">
+                <div>
+                  <label className="block text-white font-semibold mb-2">Team</label>
+                  <select
+                    value={selectedTeamForCaptain}
+                    onChange={(e) => setSelectedTeamForCaptain(e.target.value)}
+                    className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
+                  >
+                    <option value="">Select team...</option>
+                    {teams.filter(t => t.name !== "Free Agents").map((team) => (
+                      <option key={team.name} value={team.name}>{team.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-white font-semibold mb-2">Captain Email</label>
+                  <input
+                    type="email"
+                    value={captainEmail}
+                    onChange={(e) => setCaptainEmail(e.target.value)}
+                    className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
+                    placeholder="captain@example.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-white font-semibold mb-2">Captain Name</label>
+                  <input
+                    type="text"
+                    value={captainName}
+                    onChange={(e) => setCaptainName(e.target.value)}
+                    className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white"
+                    placeholder="Captain Name"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-white font-semibold mb-2">Permissions</label>
+                  <div className="space-y-2">
+                    {[
+                      'manage_roster',
+                      'propose_trades',
+                      'set_lineups',
+                      'manage_positions',
+                      'view_analytics',
+                      'manage_injuries'
+                    ].map((permission) => (
+                      <label key={permission} className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          checked={captainPermissions.includes(permission as TeamPermission)}
+                          onChange={() => togglePermission(permission as TeamPermission)}
+                          className="rounded"
+                        />
+                        <span className="text-white text-sm">
+                          {permission.replace('_', ' ').toUpperCase()}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex space-x-4 justify-center mt-6">
+                <button
+                  onClick={() => setShowCaptainModal(false)}
+                  className="px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAppointCaptain}
+                  className="px-6 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors"
+                >
+                  Appoint Captain
                 </button>
               </div>
             </div>

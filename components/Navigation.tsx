@@ -3,10 +3,15 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { getAllTeams, isTeamCaptain } from "@/lib/data";
 
 export default function Navigation() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { user, logout, isAdmin } = useAuth();
+
+  // Check if user is a team captain
+  const teams = getAllTeams();
+  const isCaptain = user?.email ? teams.some(team => isTeamCaptain(user.email!, team.name)) : false;
 
   const navItems = [
     { href: "/", label: "Home" },
@@ -49,6 +54,16 @@ export default function Navigation() {
               </Link>
             ))}
 
+            {/* Captain Link */}
+            {isCaptain && (
+              <Link
+                href="/captain"
+                className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-1 rounded-lg font-medium transition-colors"
+              >
+                👑 Captain
+              </Link>
+            )}
+
             {/* Admin Panel Link */}
             {isAdmin && (
               <Link
@@ -64,6 +79,7 @@ export default function Navigation() {
               <div className="flex items-center space-x-4">
                 <span className="text-gray-300 text-sm">
                   {user.email}
+                  {isCaptain && <span className="text-orange-400 ml-1">(Captain)</span>}
                   {isAdmin && <span className="text-red-400 ml-1">(Admin)</span>}
                 </span>
                 <button
@@ -113,6 +129,17 @@ export default function Navigation() {
                 </Link>
               ))}
 
+              {/* Captain Link - Mobile */}
+              {isCaptain && (
+                <Link
+                  href="/captain"
+                  className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 rounded-lg font-medium transition-colors text-center"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  👑 Captain
+                </Link>
+              )}
+
               {/* Admin Panel Link - Mobile */}
               {isAdmin && (
                 <Link
@@ -129,6 +156,7 @@ export default function Navigation() {
                 <div className="pt-3 border-t border-white/10">
                   <p className="text-gray-300 text-sm mb-2">
                     {user.email}
+                    {isCaptain && <span className="text-orange-400 ml-1">(Captain)</span>}
                     {isAdmin && <span className="text-red-400 ml-1">(Admin)</span>}
                   </p>
                   <button

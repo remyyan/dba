@@ -1,7 +1,13 @@
+export type PlayerPosition = 'G' | 'F' | 'C' | 'UTIL'; // Guard, Forward, Center, Utility
+
 export interface Player {
   id?: string;
   name: string;
   team: string;
+  position?: PlayerPosition;
+  jerseyNumber?: number;
+  height?: string;
+  weight?: string;
   points: number;
   careerHigh: number;
   rebounds: number;
@@ -15,7 +21,25 @@ export interface Player {
   minutes: number;
   freeThrowAttempts: number;
   mvpVotes?: number;
+  isInjured?: boolean;
+  injuryStatus?: string;
 }
+
+export interface TeamCaptain {
+  userId: string;
+  email: string;
+  name: string;
+  appointedDate: Date;
+  permissions: TeamPermission[];
+}
+
+export type TeamPermission =
+  | 'manage_roster'
+  | 'propose_trades'
+  | 'set_lineups'
+  | 'manage_positions'
+  | 'view_analytics'
+  | 'manage_injuries';
 
 export interface Team {
   id?: string;
@@ -25,6 +49,9 @@ export interface Team {
   losses: number;
   winPercentage: number;
   color: string;
+  captains?: TeamCaptain[];
+  teamMotto?: string;
+  foundedDate?: Date;
 }
 
 export interface GameRecord {
@@ -101,6 +128,10 @@ const playersData: Player[] = [
   {
     name: "J. Bai",
     team: "Golden Dragons",
+    position: "G",
+    jerseyNumber: 1,
+    height: "6'0\"",
+    weight: "175 lbs",
     points: 41.3,
     careerHigh: 56,
     rebounds: 13,
@@ -118,6 +149,10 @@ const playersData: Player[] = [
   {
     name: "R. Yan",
     team: "Golden Dragons",
+    position: "C",
+    jerseyNumber: 15,
+    height: "6'8\"",
+    weight: "220 lbs",
     points: 30.3,
     careerHigh: 33,
     rebounds: 27.3,
@@ -187,6 +222,10 @@ const playersData: Player[] = [
   {
     name: "A. Guo",
     team: "Los Sigmas",
+    position: "F",
+    jerseyNumber: 23,
+    height: "6'6\"",
+    weight: "210 lbs",
     points: 75.7,
     careerHigh: 100,
     rebounds: 30,
@@ -238,6 +277,10 @@ const playersData: Player[] = [
   {
     name: "N. Ho",
     team: "Los Sigmas",
+    position: "G",
+    jerseyNumber: 7,
+    height: "5'10\"",
+    weight: "165 lbs",
     points: 30,
     careerHigh: 30,
     rebounds: 15,
@@ -510,7 +553,18 @@ const teamsData: Team[] = [
     wins: 2,
     losses: 1,
     winPercentage: 67,
-    color: "red"
+    color: "red",
+    captains: [
+      {
+        userId: "captain1",
+        email: "captain1@example.com",
+        name: "Team Captain 1",
+        appointedDate: new Date("2024-01-01"),
+        permissions: ['manage_roster', 'propose_trades', 'set_lineups', 'manage_positions']
+      }
+    ],
+    teamMotto: "Sigma Grindset",
+    foundedDate: new Date("2024-01-01")
   },
   {
     name: "Golden Dragons",
@@ -518,7 +572,18 @@ const teamsData: Team[] = [
     wins: 1,
     losses: 2,
     winPercentage: 33,
-    color: "yellow"
+    color: "yellow",
+    captains: [
+      {
+        userId: "captain2",
+        email: "captain2@example.com",
+        name: "Team Captain 2",
+        appointedDate: new Date("2024-01-01"),
+        permissions: ['manage_roster', 'propose_trades', 'set_lineups', 'manage_positions', 'view_analytics']
+      }
+    ],
+    teamMotto: "Rise Like Dragons",
+    foundedDate: new Date("2024-01-01")
   }
 ];
 
@@ -871,6 +936,153 @@ export function formatTimeAgo(date: Date): string {
   if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
 
   return date.toLocaleDateString();
+}
+
+// Captain Management Functions
+export function isTeamCaptain(userEmail: string, teamName: string): boolean {
+  const team = teamsData.find(t => t.name === teamName);
+  return team?.captains?.some(c => c.email === userEmail) || false;
+}
+
+export function getCaptainPermissions(userEmail: string, teamName: string): TeamPermission[] {
+  const team = teamsData.find(t => t.name === teamName);
+  const captain = team?.captains?.find(c => c.email === userEmail);
+  return captain?.permissions || [];
+}
+
+export function hasPermission(userEmail: string, teamName: string, permission: TeamPermission): boolean {
+  const permissions = getCaptainPermissions(userEmail, teamName);
+  return permissions.includes(permission);
+}
+
+export function appointCaptain(teamName: string, userEmail: string, userName: string, permissions: TeamPermission[]): boolean {
+  const teamIndex = teamsData.findIndex(t => t.name === teamName);
+  if (teamIndex === -1) return false;
+
+  const newCaptain: TeamCaptain = {
+    userId: Date.now().toString(),
+    email: userEmail,
+    name: userName,
+    appointedDate: new Date(),
+    permissions
+  };
+
+  if (!teamsData[teamIndex].captains) {
+    teamsData[teamIndex].captains = [];
+  }
+
+  // Remove existing captain with same email if exists
+  teamsData[teamIndex].captains = teamsData[teamIndex].captains!.filter(c => c.email !== userEmail);
+
+  // Add new captain
+  teamsData[teamIndex].captains!.push(newCaptain);
+
+  // Add activity feed item
+  addActivityFeedItem({
+    type: 'signing',
+    title: 'New Team Captain',
+    description: `${userName} has been appointed as captain of ${teamName}`,
+    timestamp: new Date(),
+    teams: [teamName],
+    icon: '👑'
+  });
+
+  return true;
+}
+
+export function removeCaptain(teamName: string, userEmail: string): boolean {
+  const teamIndex = teamsData.findIndex(t => t.name === teamName);
+  if (teamIndex === -1) return false;
+
+  const captain = teamsData[teamIndex].captains?.find(c => c.email === userEmail);
+  if (!captain) return false;
+
+  teamsData[teamIndex].captains = teamsData[teamIndex].captains!.filter(c => c.email !== userEmail);
+
+  // Add activity feed item
+  addActivityFeedItem({
+    type: 'release',
+    title: 'Captain Removed',
+    description: `${captain.name} is no longer captain of ${teamName}`,
+    timestamp: new Date(),
+    teams: [teamName],
+    icon: '👑'
+  });
+
+  return true;
+}
+
+// Position Management Functions
+export function updatePlayerPosition(playerName: string, position: PlayerPosition): boolean {
+  const playerIndex = playersData.findIndex(p => p.name === playerName);
+  if (playerIndex === -1) return false;
+
+  const oldPosition = playersData[playerIndex].position;
+  playersData[playerIndex].position = position;
+
+  // Add activity feed item
+  addActivityFeedItem({
+    type: 'signing',
+    title: 'Position Update',
+    description: `${playerName} position changed from ${oldPosition || 'Unassigned'} to ${position}`,
+    timestamp: new Date(),
+    players: [playerName],
+    teams: [playersData[playerIndex].team],
+    icon: '📋'
+  });
+
+  return true;
+}
+
+export function updatePlayerDetails(playerName: string, updates: Partial<Player>): boolean {
+  const playerIndex = playersData.findIndex(p => p.name === playerName);
+  if (playerIndex === -1) return false;
+
+  playersData[playerIndex] = { ...playersData[playerIndex], ...updates };
+
+  return true;
+}
+
+export function getPlayersByPosition(teamName: string, position: PlayerPosition): Player[] {
+  return playersData.filter(p => p.team === teamName && p.position === position);
+}
+
+export function getTeamRoster(teamName: string): {
+  guards: Player[];
+  forwards: Player[];
+  centers: Player[];
+  utility: Player[];
+  unassigned: Player[];
+} {
+  const teamPlayers = playersData.filter(p => p.team === teamName);
+
+  return {
+    guards: teamPlayers.filter(p => p.position === 'G'),
+    forwards: teamPlayers.filter(p => p.position === 'F'),
+    centers: teamPlayers.filter(p => p.position === 'C'),
+    utility: teamPlayers.filter(p => p.position === 'UTIL'),
+    unassigned: teamPlayers.filter(p => !p.position)
+  };
+}
+
+export function getPositionColor(position?: PlayerPosition): string {
+  switch (position) {
+    case 'G': return 'bg-blue-600';
+    case 'F': return 'bg-green-600';
+    case 'C': return 'bg-purple-600';
+    case 'UTIL': return 'bg-orange-600';
+    default: return 'bg-gray-600';
+  }
+}
+
+export function getPositionName(position?: PlayerPosition): string {
+  switch (position) {
+    case 'G': return 'Guard';
+    case 'F': return 'Forward';
+    case 'C': return 'Center';
+    case 'UTIL': return 'Utility';
+    default: return 'Unassigned';
+  }
 }
 
 // Player Management Functions
