@@ -41,7 +41,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Team manager configuration - you can modify these emails
   const teamManagers = {
     'remyan.yc@gmail.com': 'Golden Dragons',
-    '': 'Los Sigmas',
+    'jonathanbai2008@gmail.com': 'Golden Dragons',
+    'andrew.guo6165@gmail.com': 'Los Sigmas',
     // Add more team managers here as needed
   };
 
