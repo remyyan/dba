@@ -165,6 +165,12 @@ export async function getPlayer(playerId: string): Promise<Player | null> {
 
 export async function getPlayerGameHistory(playerId: string): Promise<any[]> {
   try {
+    // First get the player to get their name
+    const player = await getPlayer(playerId);
+    if (!player) {
+      throw new Error('Player not found');
+    }
+
     // Get all games and filter for this player's performances
     const gamesRef = collection(db, 'games');
     const snapshot = await getDocs(gamesRef);
@@ -175,22 +181,24 @@ export async function getPlayerGameHistory(playerId: string): Promise<any[]> {
       const game = doc.data() as Game;
 
       // Check team1Players
-      const team1Performance = game.team1Players?.find(p => p.playerId === playerId);
+      const team1Performance = game.team1Players?.find(p => p.playerName === player.name);
       if (team1Performance) {
         playerGames.push({
           gameNumber: game.gameNumber,
           date: game.date,
-          ...team1Performance
+          ...team1Performance,
+          playerScore: calculatePlayerScore(team1Performance)
         });
       }
 
       // Check team2Players
-      const team2Performance = game.team2Players?.find(p => p.playerId === playerId);
+      const team2Performance = game.team2Players?.find(p => p.playerName === player.name);
       if (team2Performance) {
         playerGames.push({
           gameNumber: game.gameNumber,
           date: game.date,
-          ...team2Performance
+          ...team2Performance,
+          playerScore: calculatePlayerScore(team2Performance)
         });
       }
     });
@@ -199,7 +207,7 @@ export async function getPlayerGameHistory(playerId: string): Promise<any[]> {
     return playerGames.sort((a, b) => a.gameNumber - b.gameNumber);
   } catch (error) {
     console.error('Error getting player game history:', error);
-    throw error;
+    return [];
   }
 }
 

@@ -234,22 +234,52 @@ export default function PlayerDetailPage() {
                   <thead>
                     <tr className="border-b border-white/20">
                       <th className="text-left text-orange-400 font-semibold py-3">Game</th>
+                      <th className="text-center text-orange-400 font-semibold py-3">Date</th>
                       <th className="text-center text-orange-400 font-semibold py-3">PTS</th>
                       <th className="text-center text-orange-400 font-semibold py-3">REB</th>
                       <th className="text-center text-orange-400 font-semibold py-3">AST</th>
+                      <th className="text-center text-orange-400 font-semibold py-3">STL</th>
+                      <th className="text-center text-orange-400 font-semibold py-3">BLK</th>
+                      <th className="text-center text-orange-400 font-semibold py-3">FGM</th>
+                      <th className="text-center text-orange-400 font-semibold py-3">FGA</th>
                       <th className="text-center text-orange-400 font-semibold py-3">FG%</th>
+                      <th className="text-center text-orange-400 font-semibold py-3">3PM</th>
+                      <th className="text-center text-orange-400 font-semibold py-3">3PA</th>
+                      <th className="text-center text-orange-400 font-semibold py-3">3P%</th>
+                      <th className="text-center text-orange-400 font-semibold py-3">FTM</th>
+                      <th className="text-center text-orange-400 font-semibold py-3">FTA</th>
+                      <th className="text-center text-orange-400 font-semibold py-3">FT%</th>
                       <th className="text-center text-orange-400 font-semibold py-3">MIN</th>
+                      <th className="text-center text-orange-400 font-semibold py-3">EFF</th>
+                      <th className="text-center text-orange-400 font-semibold py-3">Score</th>
                     </tr>
                   </thead>
                   <tbody>
                     {gameHistory.map((game, index) => (
-                      <tr key={index} className="border-b border-white/10">
-                        <td className="text-white py-3">Game {game.gameNumber}</td>
+                      <tr key={index} className="border-b border-white/10 hover:bg-white/5">
+                        <td className="text-white py-3">
+                          <Link href={`/games/${game.gameNumber}`} className="hover:text-orange-400 transition-colors">
+                            Game {game.gameNumber}
+                          </Link>
+                        </td>
+                        <td className="text-center text-gray-300 py-3">{game.date}</td>
                         <td className="text-center text-gray-300 py-3">{game.points}</td>
                         <td className="text-center text-gray-300 py-3">{game.rebounds}</td>
                         <td className="text-center text-gray-300 py-3">{game.assists}</td>
+                        <td className="text-center text-gray-300 py-3">{game.steals}</td>
+                        <td className="text-center text-gray-300 py-3">{game.blocks}</td>
+                        <td className="text-center text-gray-300 py-3">{game.fgm}</td>
+                        <td className="text-center text-gray-300 py-3">{game.fga}</td>
                         <td className="text-center text-gray-300 py-3">{(game.fgPercentage * 100).toFixed(1)}%</td>
+                        <td className="text-center text-gray-300 py-3">{game.threePM}</td>
+                        <td className="text-center text-gray-300 py-3">{game.threePA}</td>
+                        <td className="text-center text-gray-300 py-3">{(game.threePPercentage * 100).toFixed(1)}%</td>
+                        <td className="text-center text-gray-300 py-3">{game.ftm}</td>
+                        <td className="text-center text-gray-300 py-3">{game.fta}</td>
+                        <td className="text-center text-gray-300 py-3">{(game.ftPercentage * 100).toFixed(1)}%</td>
                         <td className="text-center text-gray-300 py-3">{game.minutes}</td>
+                        <td className="text-center text-gray-300 py-3">{game.efficiency.toFixed(1)}</td>
+                        <td className="text-center text-gray-300 py-3">{game.playerScore?.toFixed(1) || '-'}</td>
                       </tr>
                     ))}
                   </tbody>

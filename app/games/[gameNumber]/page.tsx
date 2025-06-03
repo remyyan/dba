@@ -3,7 +3,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { getGame } from "@/lib/firebase-data";
+import { getGame, calculatePlayerScore } from "@/lib/firebase-data";
 import Navigation from "@/components/Navigation";
 
 interface GamePageProps {
@@ -22,6 +22,17 @@ export default function GamePage({ params }: GamePageProps) {
         const gameNum = parseInt(gameNumStr);
 
         const gameData = await getGame(gameNum);
+        if (gameData) {
+          // Calculate player scores for all players
+          gameData.team1Players = gameData.team1Players.map((player: any) => ({
+            ...player,
+            playerScore: calculatePlayerScore(player)
+          }));
+          gameData.team2Players = gameData.team2Players.map((player: any) => ({
+            ...player,
+            playerScore: calculatePlayerScore(player)
+          }));
+        }
         setGame(gameData);
       } catch (error) {
         console.error('Error loading game:', error);
@@ -207,6 +218,7 @@ export default function GamePage({ params }: GamePageProps) {
                   <th className="text-center text-orange-400 font-semibold py-2">STL</th>
                   <th className="text-center text-orange-400 font-semibold py-2">BLK</th>
                   <th className="text-center text-orange-400 font-semibold py-2">MIN</th>
+                  <th className="text-center text-orange-400 font-semibold py-2">Score</th>
                 </tr>
               </thead>
               <tbody>
@@ -236,6 +248,7 @@ export default function GamePage({ params }: GamePageProps) {
                     <td className="text-center text-gray-300 py-2">{formatStat(player.steals)}</td>
                     <td className="text-center text-gray-300 py-2">{formatStat(player.blocks)}</td>
                     <td className="text-center text-gray-300 py-2">{formatStat(player.minutes)}</td>
+                    <td className="text-center text-gray-300 py-2">{player.playerScore?.toFixed(1) || '-'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -271,6 +284,7 @@ export default function GamePage({ params }: GamePageProps) {
                   <th className="text-center text-orange-400 font-semibold py-2">STL</th>
                   <th className="text-center text-orange-400 font-semibold py-2">BLK</th>
                   <th className="text-center text-orange-400 font-semibold py-2">MIN</th>
+                  <th className="text-center text-orange-400 font-semibold py-2">Score</th>
                 </tr>
               </thead>
               <tbody>
@@ -300,6 +314,7 @@ export default function GamePage({ params }: GamePageProps) {
                     <td className="text-center text-gray-300 py-2">{formatStat(player.steals)}</td>
                     <td className="text-center text-gray-300 py-2">{formatStat(player.blocks)}</td>
                     <td className="text-center text-gray-300 py-2">{formatStat(player.minutes)}</td>
+                    <td className="text-center text-gray-300 py-2">{player.playerScore?.toFixed(1) || '-'}</td>
                   </tr>
                 ))}
               </tbody>
