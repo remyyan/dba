@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { getAllTeams, getAllPlayers, transferPlayer, addNewPlayer } from '@/lib/firebase-data';
+import { getAllTeams, getAllPlayers, transferPlayer, addNewPlayer, createTradeProposal, getTradeProposals, respondToTradeProposal, cancelTradeProposal } from '@/lib/firebase-data';
 import { addActivity } from '@/lib/activities';
 import Navigation from '@/components/Navigation';
 
@@ -14,11 +14,17 @@ export default function TeamManagerPage() {
   const [players, setPlayers] = useState<any[]>([]);
   const [freeAgents, setFreeAgents] = useState<any[]>([]);
   const [currentTeamPlayers, setCurrentTeamPlayers] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'add' | 'drop'>('add');
+  const [activeTab, setActiveTab] = useState<'add' | 'drop' | 'trade'>('add');
 
   // Form states
   const [selectedFreeAgent, setSelectedFreeAgent] = useState('');
   const [dropPlayer, setDropPlayer] = useState('');
+
+  // Trade states
+  const [tradeProposals, setTradeProposals] = useState<any[]>([]);
+  const [myPlayers, setMyPlayers] = useState<string[]>([]);
+  const [theirPlayers, setTheirPlayers] = useState<string[]>([]);
+  const [otherTeamPlayers, setOtherTeamPlayers] = useState<any[]>([]);
 
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState('');
@@ -47,8 +53,17 @@ export default function TeamManagerPage() {
         const teamPlayers = playersData.filter((p: any) => p.team === managedTeam);
         const freeAgentPlayers = playersData.filter((p: any) => p.team === 'Free Agent');
 
+        // Get other team players for trading
+        const otherTeam = managedTeam === 'Golden Dragons' ? 'Los Sigmas' : 'Golden Dragons';
+        const otherTeamPlayersData = playersData.filter((p: any) => p.team === otherTeam);
+
         setCurrentTeamPlayers(teamPlayers);
         setFreeAgents(freeAgentPlayers);
+        setOtherTeamPlayers(otherTeamPlayersData);
+
+        // Load trade proposals
+        const proposals = await getTradeProposals(managedTeam);
+        setTradeProposals(proposals);
       } catch (error) {
         console.error('Error loading data:', error);
         setMessage('Error loading data');
@@ -158,6 +173,124 @@ export default function TeamManagerPage() {
     }
   };
 
+  const handleTrade = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (myPlayers.length === 0 || theirPlayers.length === 0) {
+      setMessage('Please select at least one player from each team.');
+      return;
+    }
+
+    setSubmitting(true);
+    setMessage('');
+
+    try {
+      const otherTeam = managedTeam === 'Golden Dragons' ? 'Los Sigmas' : 'Golden Dragons';
+      
+      // Create trade proposal
+      await createTradeProposal({
+        fromTeam: managedTeam,
+        toTeam: otherTeam,
+        fromPlayers: myPlayers,
+        toPlayers: theirPlayers,
+        proposedBy: user?.email || ''
+      });
+
+      // Create activity
+      await addActivity({
+        type: 'trade',
+        description: `Trade proposal: ${myPlayers.join(', ')} for ${theirPlayers.join(', ')}`,
+        playerName: myPlayers[0], // Use first player for activity
+        fromTeam: managedTeam,
+        toTeam: otherTeam,
+        details: `Multi-player trade proposal created by team manager`
+      });
+
+      setMessage(`Trade proposal sent: ${myPlayers.join(', ')} for ${theirPlayers.join(', ')}`);
+      setMyPlayers([]);
+      setTheirPlayers([]);
+
+      // Reload trade proposals
+      const proposals = await getTradeProposals(managedTeam);
+      setTradeProposals(proposals);
+    } catch (error) {
+      setMessage('Error creating trade proposal. Please try again.');
+      console.error('Error:', error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleTradeResponse = async (proposalId: string, accept: boolean) => {
+    setSubmitting(true);
+    setMessage('');
+
+    try {
+      const proposal = tradeProposals.find(p => p.id === proposalId);
+      if (!proposal) return;
+
+      if (accept) {
+        // Execute the trades for all players
+        for (let i = 0; i < proposal.fromPlayers.length; i++) {
+          await transferPlayer(proposal.fromPlayers[i], proposal.fromTeam, proposal.toTeam);
+        }
+        for (let i = 0; i < proposal.toPlayers.length; i++) {
+          await transferPlayer(proposal.toPlayers[i], proposal.toTeam, proposal.fromTeam);
+        }
+
+        // Create activity for the trade
+        await addActivity({
+          type: 'trade',
+          description: `Trade completed: ${proposal.fromPlayers.join(', ')} for ${proposal.toPlayers.join(', ')}`,
+          playerName: proposal.fromPlayers[0], // Use first player for activity
+          fromTeam: proposal.fromTeam,
+          toTeam: proposal.toTeam,
+          details: `Multi-player trade completed between teams`
+        });
+      }
+
+      // Update proposal status
+      await respondToTradeProposal(proposalId, accept ? 'accepted' : 'rejected', user?.email || '');
+
+      // Reload data
+      const [playersData, proposals] = await Promise.all([
+        getAllPlayers(),
+        getTradeProposals(managedTeam)
+      ]);
+
+      setPlayers(playersData);
+      setTradeProposals(proposals);
+      const teamPlayers = playersData.filter((p: any) => p.team === managedTeam);
+      const otherTeam = managedTeam === 'Golden Dragons' ? 'Los Sigmas' : 'Golden Dragons';
+      const otherTeamPlayersData = playersData.filter((p: any) => p.team === otherTeam);
+      setCurrentTeamPlayers(teamPlayers);
+      setOtherTeamPlayers(otherTeamPlayersData);
+
+      setMessage(accept ? 'Trade completed successfully!' : 'Trade proposal rejected');
+    } catch (error) {
+      setMessage('Error processing trade. Please try again.');
+      console.error('Error:', error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCancelTrade = async (proposalId: string) => {
+    setSubmitting(true);
+    setMessage('');
+
+    try {
+      await cancelTradeProposal(proposalId);
+      const proposals = await getTradeProposals(managedTeam);
+      setTradeProposals(proposals);
+      setMessage('Trade proposal cancelled');
+    } catch (error) {
+      setMessage('Error cancelling trade proposal. Please try again.');
+      console.error('Error:', error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
       <Navigation />
@@ -191,7 +324,8 @@ export default function TeamManagerPage() {
         <div className="flex space-x-4 mb-8 justify-center">
           {[
             { key: 'add', label: 'Sign Free Agent', icon: '✍️' },
-            { key: 'drop', label: 'Release Player', icon: '❌' }
+            { key: 'drop', label: 'Release Player', icon: '❌' },
+            { key: 'trade', label: 'Trade Players', icon: '🔄' }
           ].map((tab) => (
             <button
               key={tab.key}
@@ -274,6 +408,133 @@ export default function TeamManagerPage() {
                   {submitting ? 'Releasing...' : 'Release Player'}
                 </button>
               </form>
+            </div>
+          )}
+
+          {activeTab === 'trade' && (
+            <div>
+              <h2 className="text-2xl font-bold text-white mb-6">Trade Players</h2>
+              <form onSubmit={handleTrade} className="space-y-4">
+                <div className="grid md:grid-cols-2 gap-6">
+                  {/* Your Team's Players */}
+                  <div>
+                    <label className="block text-white font-medium mb-2">Your Players</label>
+                    <div className="space-y-2">
+                      {currentTeamPlayers.map((player: any) => (
+                        <div key={player.id} className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            id={`my-${player.id}`}
+                            checked={myPlayers.includes(player.name)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setMyPlayers([...myPlayers, player.name]);
+                              } else {
+                                setMyPlayers(myPlayers.filter(p => p !== player.name));
+                              }
+                            }}
+                            className="w-4 h-4 text-blue-600 bg-white/10 border-white/20 rounded focus:ring-blue-500"
+                          />
+                          <label htmlFor={`my-${player.id}`} className="text-white">
+                            {player.name} ({player.points.toFixed(1)} PPG)
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Their Team's Players */}
+                  <div>
+                    <label className="block text-white font-medium mb-2">Their Players</label>
+                    <div className="space-y-2">
+                      {otherTeamPlayers.map((player: any) => (
+                        <div key={player.id} className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            id={`their-${player.id}`}
+                            checked={theirPlayers.includes(player.name)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setTheirPlayers([...theirPlayers, player.name]);
+                              } else {
+                                setTheirPlayers(theirPlayers.filter(p => p !== player.name));
+                              }
+                            }}
+                            className="w-4 h-4 text-blue-600 bg-white/10 border-white/20 rounded focus:ring-blue-500"
+                          />
+                          <label htmlFor={`their-${player.id}`} className="text-white">
+                            {player.name} ({player.points.toFixed(1)} PPG)
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={submitting || myPlayers.length === 0 || theirPlayers.length === 0}
+                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-600/50 text-white px-8 py-3 rounded-lg font-semibold transition-colors"
+                >
+                  {submitting ? 'Creating Trade...' : 'Propose Trade'}
+                </button>
+              </form>
+
+              {/* Trade Proposals */}
+              {tradeProposals.length > 0 && (
+                <div className="mt-8">
+                  <h3 className="text-xl font-bold text-white mb-4">Trade Proposals</h3>
+                  <div className="space-y-4">
+                    {tradeProposals.map((proposal) => (
+                      <div key={proposal.id} className="bg-black/20 rounded-lg p-4">
+                        <div className="flex justify-between items-center mb-2">
+                          <div className="text-white">
+                            <div className="font-medium">{proposal.fromPlayers.join(', ')}</div>
+                            <div className="text-gray-400 text-sm">from {proposal.fromTeam}</div>
+                            <div className="mx-2 my-1">↔️</div>
+                            <div className="font-medium">{proposal.toPlayers.join(', ')}</div>
+                            <div className="text-gray-400 text-sm">from {proposal.toTeam}</div>
+                          </div>
+                          <span className={`px-2 py-1 rounded text-sm ${
+                            proposal.status === 'pending' ? 'bg-yellow-500/20 text-yellow-300' :
+                            proposal.status === 'accepted' ? 'bg-green-500/20 text-green-300' :
+                            'bg-red-500/20 text-red-300'
+                          }`}>
+                            {proposal.status.charAt(0).toUpperCase() + proposal.status.slice(1)}
+                          </span>
+                        </div>
+                        {proposal.status === 'pending' && (
+                          <div className="flex space-x-2 mt-2">
+                            {proposal.fromTeam === managedTeam ? (
+                              <button
+                                onClick={() => handleCancelTrade(proposal.id)}
+                                className="px-3 py-1 bg-red-600/20 hover:bg-red-600/30 text-red-300 rounded text-sm"
+                              >
+                                Cancel
+                              </button>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => handleTradeResponse(proposal.id, true)}
+                                  className="px-3 py-1 bg-green-600/20 hover:bg-green-600/30 text-green-300 rounded text-sm"
+                                >
+                                  Accept
+                                </button>
+                                <button
+                                  onClick={() => handleTradeResponse(proposal.id, false)}
+                                  className="px-3 py-1 bg-red-600/20 hover:bg-red-600/30 text-red-300 rounded text-sm"
+                                >
+                                  Reject
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

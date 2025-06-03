@@ -256,6 +256,89 @@ export async function transferPlayer(playerName: string, fromTeam: string, toTea
   }
 }
 
+// Trade Proposal Operations
+export interface TradeProposal {
+  id?: string;
+  fromTeam: string;
+  toTeam: string;
+  fromPlayers: string[];
+  toPlayers: string[];
+  status: 'pending' | 'accepted' | 'rejected' | 'cancelled';
+  proposedBy: string; // email of proposer
+  proposedAt: Timestamp;
+  respondedAt?: Timestamp;
+  respondedBy?: string;
+}
+
+export async function createTradeProposal(proposal: Omit<TradeProposal, 'id' | 'proposedAt' | 'status'>): Promise<string> {
+  try {
+    const docRef = await addDoc(collection(db, 'tradeProposals'), {
+      ...proposal,
+      status: 'pending',
+      proposedAt: Timestamp.now()
+    });
+    return docRef.id;
+  } catch (error) {
+    console.error('Error creating trade proposal:', error);
+    throw error;
+  }
+}
+
+export async function getTradeProposals(teamName: string): Promise<TradeProposal[]> {
+  try {
+    const q = query(
+      collection(db, 'tradeProposals'),
+      where('status', '==', 'pending')
+    );
+    const querySnapshot = await getDocs(q);
+    const proposals: TradeProposal[] = [];
+
+    querySnapshot.forEach((doc) => {
+      const data = doc.data() as TradeProposal;
+      if (data.fromTeam === teamName || data.toTeam === teamName) {
+        proposals.push({
+          id: doc.id,
+          ...data
+        });
+      }
+    });
+
+    return proposals.sort((a, b) => b.proposedAt.seconds - a.proposedAt.seconds);
+  } catch (error) {
+    console.error('Error fetching trade proposals:', error);
+    return [];
+  }
+}
+
+export async function respondToTradeProposal(
+  proposalId: string,
+  status: 'accepted' | 'rejected',
+  respondedBy: string
+): Promise<void> {
+  try {
+    await updateDoc(doc(db, 'tradeProposals', proposalId), {
+      status,
+      respondedAt: Timestamp.now(),
+      respondedBy
+    });
+  } catch (error) {
+    console.error('Error responding to trade proposal:', error);
+    throw error;
+  }
+}
+
+export async function cancelTradeProposal(proposalId: string): Promise<void> {
+  try {
+    await updateDoc(doc(db, 'tradeProposals', proposalId), {
+      status: 'cancelled',
+      respondedAt: Timestamp.now()
+    });
+  } catch (error) {
+    console.error('Error cancelling trade proposal:', error);
+    throw error;
+  }
+}
+
 export async function addNewPlayer(playerData: Omit<Player, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
   try {
     // Check if player already exists
