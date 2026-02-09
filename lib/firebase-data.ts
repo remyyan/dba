@@ -502,10 +502,34 @@ export async function getGame(gameNumber: number): Promise<Game | null> {
       return null;
     }
 
-    const doc = querySnapshot.docs[0];
+    // If there are duplicates for the same gameNumber, pick the "best/latest" doc.
+    const ranked = querySnapshot.docs
+      .map((snap) => {
+        const data = snap.data() as any;
+        const createdSeconds = data?.createdAt?.seconds ?? 0;
+        const updatedSeconds = data?.updatedAt?.seconds ?? createdSeconds ?? 0;
+        const hasTeams = Boolean(data?.team1) && Boolean(data?.team2);
+        const hasScores = typeof data?.team1Score === 'number' && typeof data?.team2Score === 'number';
+        const hasPotg = Boolean(data?.playerOfTheGame?.playerName) && Boolean(data?.playerOfTheGame?.team);
+        const hasPlayers = Array.isArray(data?.team1Players) && Array.isArray(data?.team2Players) &&
+          (data.team1Players.length + data.team2Players.length) > 0;
+
+        // Higher is better.
+        const score =
+          (hasPotg ? 1000 : 0) +
+          (hasPlayers ? 200 : 0) +
+          (hasTeams ? 100 : 0) +
+          (hasScores ? 50 : 0) +
+          updatedSeconds;
+
+        return { snap, data, score };
+      })
+      .sort((a, b) => b.score - a.score);
+
+    const best = ranked[0];
     return {
-      id: doc.id,
-      ...doc.data()
+      id: best.snap.id,
+      ...best.data
     } as Game;
   } catch (error) {
     console.error('Error fetching game:', error);
@@ -645,6 +669,184 @@ export async function updateTeamRecords(): Promise<void> {
     }
   } catch (error) {
     console.error('Error updating team records:', error);
+    throw error;
+  }
+}
+
+function normalizePlayerName(name: string): string {
+  return (name || '').trim().toLowerCase();
+}
+
+function roundTo(value: number, decimals: number): number {
+  if (!Number.isFinite(value)) return 0;
+  const factor = Math.pow(10, decimals);
+  return Math.round(value * factor) / factor;
+}
+
+type PlayerAgg = {
+  gamesPlayed: number;
+  points: number;
+  rebounds: number;
+  assists: number;
+  steals: number;
+  blocks: number;
+  minutes: number;
+  fgm: number;
+  fga: number;
+  threePM: number;
+  threePA: number;
+  ftm: number;
+  fta: number;
+  efficiencySum: number;
+  playerScoreSum: number;
+};
+
+/**
+ * Recalculate every player's season averages from ALL games in `games/*`.
+ * This is useful after imports or data fixes where player season averages got out of sync.
+ */
+export async function recalculatePlayerAveragesFromGames(): Promise<{
+  playersTotal: number;
+  playersUpdated: number;
+  playersSkipped: number;
+}> {
+  try {
+    const [players, games] = await Promise.all([getAllPlayers(), getAllGames()]);
+
+    const aggs = new Map<string, PlayerAgg>();
+    const getOrInit = (key: string): PlayerAgg => {
+      const existing = aggs.get(key);
+      if (existing) return existing;
+      const fresh: PlayerAgg = {
+        gamesPlayed: 0,
+        points: 0,
+        rebounds: 0,
+        assists: 0,
+        steals: 0,
+        blocks: 0,
+        minutes: 0,
+        fgm: 0,
+        fga: 0,
+        threePM: 0,
+        threePA: 0,
+        ftm: 0,
+        fta: 0,
+        efficiencySum: 0,
+        playerScoreSum: 0
+      };
+      aggs.set(key, fresh);
+      return fresh;
+    };
+
+    const recordPerformance = (perf: GamePlayer | undefined) => {
+      if (!perf) return;
+      const nameKey = `name:${normalizePlayerName(perf.playerName)}`;
+      const idKey = perf.playerId ? `id:${perf.playerId}` : '';
+
+      const efficiency = Number.isFinite(perf.efficiency) ? perf.efficiency : calculatePlayerEfficiency(perf);
+      const playerScore = calculatePlayerScore(perf);
+
+      const apply = (agg: PlayerAgg) => {
+        agg.gamesPlayed += 1;
+        agg.points += perf.points || 0;
+        agg.rebounds += perf.rebounds || 0;
+        agg.assists += perf.assists || 0;
+        agg.steals += perf.steals || 0;
+        agg.blocks += perf.blocks || 0;
+        agg.minutes += perf.minutes || 0;
+        agg.fgm += perf.fgm || 0;
+        agg.fga += perf.fga || 0;
+        agg.threePM += perf.threePM || 0;
+        agg.threePA += perf.threePA || 0;
+        agg.ftm += perf.ftm || 0;
+        agg.fta += perf.fta || 0;
+        agg.efficiencySum += efficiency;
+        agg.playerScoreSum += playerScore;
+      };
+
+      // Always record by name, and also by id if present.
+      apply(getOrInit(nameKey));
+      if (idKey) apply(getOrInit(idKey));
+    };
+
+    for (const game of games) {
+      for (const perf of game.team1Players || []) recordPerformance(perf);
+      for (const perf of game.team2Players || []) recordPerformance(perf);
+    }
+
+    let playersUpdated = 0;
+    let playersSkipped = 0;
+
+    // Firestore batches are limited to 500 writes; keep margin.
+    let batch = writeBatch(db);
+    let batchWrites = 0;
+
+    const commitBatchIfNeeded = async (force = false) => {
+      if (batchWrites === 0) return;
+      if (!force && batchWrites < 450) return;
+      await batch.commit();
+      batch = writeBatch(db);
+      batchWrites = 0;
+    };
+
+    for (const player of players) {
+      if (!player.id) {
+        playersSkipped += 1;
+        continue;
+      }
+
+      const keyById = `id:${player.id}`;
+      const keyByName = `name:${normalizePlayerName(player.name)}`;
+      const agg = aggs.get(keyById) || aggs.get(keyByName);
+
+      const gp = agg?.gamesPlayed || 0;
+      const avgDiv = gp > 0 ? gp : 1;
+
+      const fgmTotal = agg?.fgm || 0;
+      const fgaTotal = agg?.fga || 0;
+      const threePMTotal = agg?.threePM || 0;
+      const threePATotal = agg?.threePA || 0;
+      const ftmTotal = agg?.ftm || 0;
+      const ftaTotal = agg?.fta || 0;
+
+      const updates: Partial<Player> = {
+        gamesPlayed: gp,
+        points: roundTo((agg?.points || 0) / avgDiv, 2),
+        rebounds: roundTo((agg?.rebounds || 0) / avgDiv, 2),
+        assists: roundTo((agg?.assists || 0) / avgDiv, 2),
+        steals: roundTo((agg?.steals || 0) / avgDiv, 2),
+        blocks: roundTo((agg?.blocks || 0) / avgDiv, 2),
+        minutes: roundTo((agg?.minutes || 0) / avgDiv, 2),
+        fgm: roundTo(fgmTotal / avgDiv, 2),
+        fga: roundTo(fgaTotal / avgDiv, 2),
+        fgPercentage: roundTo(fgaTotal > 0 ? fgmTotal / fgaTotal : 0, 3),
+        threePM: roundTo(threePMTotal / avgDiv, 2),
+        threePA: roundTo(threePATotal / avgDiv, 2),
+        threePPercentage: roundTo(threePATotal > 0 ? threePMTotal / threePATotal : 0, 3),
+        ftm: roundTo(ftmTotal / avgDiv, 2),
+        fta: roundTo(ftaTotal / avgDiv, 2),
+        ftPercentage: roundTo(ftaTotal > 0 ? ftmTotal / ftaTotal : 0, 3),
+        efficiency: roundTo(gp > 0 ? (agg?.efficiencySum || 0) / gp : 0, 2),
+        playerScore: roundTo(gp > 0 ? (agg?.playerScoreSum || 0) / gp : 0, 2),
+        updatedAt: Timestamp.now()
+      };
+
+      batch.update(doc(db, 'players', player.id), updates);
+      batchWrites += 1;
+      playersUpdated += 1;
+
+      await commitBatchIfNeeded(false);
+    }
+
+    await commitBatchIfNeeded(true);
+
+    return {
+      playersTotal: players.length,
+      playersUpdated,
+      playersSkipped
+    };
+  } catch (error) {
+    console.error('Error recalculating player averages:', error);
     throw error;
   }
 }

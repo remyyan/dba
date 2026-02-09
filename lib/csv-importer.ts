@@ -66,7 +66,6 @@ export function parseCSVContent(csvContent: string): CSVGameData {
     if (!line ||
         line.includes('Players,Points') ||
         line.includes('Game Totals') ||
-        line.includes('Final Score') ||
         line.startsWith('Q1') ||
         line.startsWith('Q2') ||
         line.startsWith('Q3') ||
@@ -74,22 +73,8 @@ export function parseCSVContent(csvContent: string): CSVGameData {
       continue;
     }
 
-    // Check if this line indicates a team section
-    if (line.includes('Team:')) {
-      // This is a team header, next team section starts
-      currentTeam = currentTeam === '' ? 'Golden Dragons' : 'Los Sigmas';
-      continue;
-    }
-
-    // Try to parse as player data
-    const player = parsePlayerRow(line, currentTeam);
-    if (player && player.name) {
-      players.push(player);
-    }
-
-    // Extract final scores
+    // Extract final scores (usually the next line after "Final Score")
     if (line.includes('Final Score')) {
-      // Check the next line and the line after that
       const nextLine = lines[i + 1];
       const lineAfterNext = lines[i + 2];
 
@@ -111,6 +96,29 @@ export function parseCSVContent(csvContent: string): CSVGameData {
           console.log('Extracted final scores from line after next:', { team1Score, team2Score, lineAfterNext });
         }
       }
+
+      continue;
+    }
+
+    // Check if this line indicates a team section
+    if (line.includes('Team:')) {
+      // Try to parse team name after "Team:"; if absent, fall back to toggling.
+      const after = line.split('Team:')[1]?.trim() || '';
+      const normalized = after.toLowerCase();
+      if (normalized.includes('golden')) {
+        currentTeam = 'Golden Dragons';
+      } else if (normalized.includes('sigma') || normalized.includes('los')) {
+        currentTeam = 'Los Sigmas';
+      } else {
+        currentTeam = currentTeam === '' ? 'Golden Dragons' : 'Los Sigmas';
+      }
+      continue;
+    }
+
+    // Try to parse as player data
+    const player = parsePlayerRow(line, currentTeam);
+    if (player && player.name) {
+      players.push(player);
     }
   }
 
@@ -229,7 +237,8 @@ function parsePlayerRow(line: string, team: string): CSVPlayerData | null {
   if (parts.length < 16) return null;
 
   const name = parts[0];
-  if (!name || name.toLowerCase().includes('total') || name.toLowerCase().includes('team') || name === '') {
+  const nameLower = (name || '').trim().toLowerCase();
+  if (!name || nameLower === '' || nameLower === 'players' || nameLower.includes('total') || nameLower.includes('team')) {
     return null;
   }
 

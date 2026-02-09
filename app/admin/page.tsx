@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { getAllTeams, getAllPlayers, addNewPlayer, updatePlayer, transferPlayer, cleanupQuarterPlayers, cleanupDuplicateTeams, updateTeamRecords } from '@/lib/firebase-data';
+import { getAllTeams, getAllPlayers, addNewPlayer, updatePlayer, transferPlayer, cleanupQuarterPlayers, cleanupDuplicateTeams, updateTeamRecords, recalculatePlayerAveragesFromGames } from '@/lib/firebase-data';
 import { addActivity } from '@/lib/activities';
 import { importGameFromCSV } from '@/lib/csv-importer';
 import Navigation from '@/components/Navigation';
@@ -400,6 +400,24 @@ export default function AdminPage() {
     }
   };
 
+  const handleRecalculatePlayerAverages = async () => {
+    setSubmitting(true);
+    setMessage('');
+
+    try {
+      const result = await recalculatePlayerAveragesFromGames();
+      setMessage(`Successfully recalculated player averages from all games! Updated ${result.playersUpdated}/${result.playersTotal} players.`);
+
+      // Reload data
+      await loadData();
+    } catch (error) {
+      setMessage('Error recalculating player averages.');
+      console.error('Error:', error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
       <Navigation />
@@ -523,6 +541,13 @@ export default function AdminPage() {
                       className="w-full bg-green-500 hover:bg-green-600 disabled:bg-green-500/50 text-white px-8 py-3 rounded-lg font-semibold transition-colors"
                     >
                       {submitting ? 'Calculating...' : 'Recalculate Team Records'}
+                    </button>
+                    <button
+                      onClick={handleRecalculatePlayerAverages}
+                      disabled={submitting}
+                      className="w-full bg-green-500 hover:bg-green-600 disabled:bg-green-500/50 text-white px-8 py-3 rounded-lg font-semibold transition-colors"
+                    >
+                      {submitting ? 'Calculating...' : 'Recalculate Player Averages'}
                     </button>
                   </div>
                 </div>
