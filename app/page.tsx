@@ -4,14 +4,18 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { getAllTeams, getAllGames, getAllPlayers } from "@/lib/firebase-data";
+import { getAllTeams, getAllGames, getAllPlayers, CURRENT_SEASON, ALL_SEASONS } from "@/lib/firebase-data";
 import Navigation from "@/components/Navigation";
 import ActivityFeed from "@/components/ActivityFeed";
 
 export default function Home() {
   const [teams, setTeams] = useState<any[]>([]);
+  const [allGames, setAllGames] = useState<any[]>([]);
   const [recentGames, setRecentGames] = useState<any[]>([]);
+  const [allPlayers, setAllPlayers] = useState<any[]>([]);
   const [teamPlayerCounts, setTeamPlayerCounts] = useState<{[key: string]: number}>({});
+  const [teamRecords, setTeamRecords] = useState<{[key: string]: {wins: number, losses: number, winPercentage: number}}>({});
+  const [selectedSeason, setSelectedSeason] = useState(CURRENT_SEASON);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -42,7 +46,8 @@ export default function Home() {
 
         setTeams(uniqueTeams);
         setTeamPlayerCounts(playerCounts);
-        setRecentGames(gamesData.slice(-3).reverse()); // Last 3 games, most recent first
+        setAllGames(gamesData);
+        setAllPlayers(playersData);
       } catch (error) {
         console.error('Error loading data:', error);
       } finally {
@@ -52,6 +57,39 @@ export default function Home() {
 
     loadData();
   }, []);
+
+  // Filter games and compute team records by selected season
+  useEffect(() => {
+    const seasonGames = allGames.filter(g => g.season === selectedSeason);
+    setRecentGames(seasonGames.slice(-3).reverse()); // Last 3 games of selected season
+
+    // Compute team records from season games
+    const records: {[key: string]: {wins: number, losses: number, winPercentage: number}} = {};
+
+    for (const team of teams) {
+      records[team.name] = { wins: 0, losses: 0, winPercentage: 0 };
+    }
+
+    for (const game of seasonGames) {
+      if (records[game.team1] && records[game.team2]) {
+        if (game.team1Score > game.team2Score) {
+          records[game.team1].wins++;
+          records[game.team2].losses++;
+        } else if (game.team2Score > game.team1Score) {
+          records[game.team2].wins++;
+          records[game.team1].losses++;
+        }
+      }
+    }
+
+    // Calculate win percentages
+    for (const teamName of Object.keys(records)) {
+      const total = records[teamName].wins + records[teamName].losses;
+      records[teamName].winPercentage = total > 0 ? Math.round((records[teamName].wins / total) * 100) : 0;
+    }
+
+    setTeamRecords(records);
+  }, [allGames, teams, selectedSeason]);
 
   if (loading) {
     return (
@@ -97,10 +135,26 @@ export default function Home() {
       {/* Teams Overview */}
       <section className="py-16 px-4">
         <div className="max-w-7xl mx-auto">
-          <h3 className="text-3xl font-bold text-white mb-8 text-center">Teams</h3>
+          <div className="flex flex-col sm:flex-row items-center justify-between mb-8 gap-4">
+            <h3 className="text-3xl font-bold text-white">Team Standings</h3>
+            <div className="flex items-center space-x-3">
+              <span className="text-gray-300 text-sm">Season:</span>
+              <select
+                value={selectedSeason}
+                onChange={(e) => setSelectedSeason(e.target.value)}
+                className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-orange-500"
+              >
+                {ALL_SEASONS.map(season => (
+                  <option key={season} value={season} className="bg-slate-800">{season}</option>
+                ))}
+              </select>
+            </div>
+          </div>
           <div className="grid md:grid-cols-2 gap-8">
-            {teams.map((team, index) => (
-              <Link key={team.id || `${team.name}-${index}`} href={`/teams/${encodeURIComponent(team.name)}`}>
+            {teams.map((team, index) => {
+              const record = teamRecords[team.name] || { wins: 0, losses: 0, winPercentage: 0 };
+              return (
+              <Link key={team.id || `${team.name}-${index}`} href={`/teams/${encodeURIComponent(team.name)}?season=${selectedSeason}`}>
                 <div className={`bg-white/10 backdrop-blur-sm rounded-xl p-8 border border-white/20 hover:bg-white/20 transition-all cursor-pointer ${
                   team.name === 'Golden Dragons' ? 'hover:border-yellow-400' : 'hover:border-red-400'
                 }`}>
@@ -111,14 +165,15 @@ export default function Home() {
                       {team.name === 'Golden Dragons' ? '🐉' : '🔥'}
                     </div>
                     <h4 className="text-2xl font-bold text-white mb-2">{team.name}</h4>
-                    <p className="text-gray-300 text-lg mb-4">{team.wins}-{team.losses} ({team.winPercentage}%)</p>
+                    <p className="text-gray-300 text-lg mb-4">{record.wins}-{record.losses} ({record.winPercentage}%)</p>
                     <p className="text-gray-400">
                       {teamPlayerCounts[team.name] || 0} Players
                     </p>
                   </div>
                 </div>
               </Link>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
@@ -126,7 +181,26 @@ export default function Home() {
       {/* Recent Games */}
       <section className="py-16 px-4 bg-black/20">
         <div className="max-w-7xl mx-auto">
-          <h3 className="text-3xl font-bold text-white mb-8 text-center">Recent Games</h3>
+          <div className="flex flex-col sm:flex-row items-center justify-between mb-8 gap-4">
+            <h3 className="text-3xl font-bold text-white">Recent Games</h3>
+            <div className="flex items-center space-x-3">
+              <span className="text-gray-300 text-sm">Season:</span>
+              <select
+                value={selectedSeason}
+                onChange={(e) => setSelectedSeason(e.target.value)}
+                className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-orange-500"
+              >
+                {ALL_SEASONS.map(season => (
+                  <option key={season} value={season} className="bg-slate-800">{season}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          {recentGames.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-gray-400">No games found for {selectedSeason}.</p>
+            </div>
+          ) : (
           <div className="space-y-4">
             {recentGames.map((game) => (
               <Link key={game.gameNumber} href={`/games/${game.gameNumber}`}>
@@ -162,6 +236,7 @@ export default function Home() {
               </Link>
             ))}
           </div>
+          )}
           <div className="text-center mt-8">
             <Link
               href="/games"

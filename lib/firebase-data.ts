@@ -14,6 +14,11 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 
+// Season Configuration
+export const CURRENT_SEASON = '2026-2027';
+export const ALL_SEASONS = ['2024-2025', '2026-2027'] as const;
+export type Season = typeof ALL_SEASONS[number];
+
 // Data Types
 export interface Player {
   id?: string;
@@ -25,6 +30,8 @@ export interface Player {
   weight?: number; // in pounds
   age?: number;
   jerseyNumber?: number;
+  // Season context
+  season?: string; // The season these averages are for
   // Season averages
   gamesPlayed: number;
   points: number;
@@ -32,6 +39,7 @@ export interface Player {
   assists: number;
   steals: number;
   blocks: number;
+  turnovers: number;
   minutes: number;
   fgm: number;
   fga: number;
@@ -52,6 +60,7 @@ export interface Player {
 export interface Team {
   id?: string;
   name: string;
+  season?: string; // The season these records are for
   wins: number;
   losses: number;
   winPercentage: number;
@@ -71,6 +80,7 @@ export interface GamePlayer {
   assists: number;
   steals: number;
   blocks: number;
+  turnovers: number;
   minutes: number;
   fgm: number;
   fga: number;
@@ -87,6 +97,7 @@ export interface GamePlayer {
 export interface Game {
   id?: string;
   gameNumber: number;
+  season: string; // e.g., "2024-2025" or "2026-2027"
   date: string;
   team1: string;
   team2: string;
@@ -602,13 +613,18 @@ export function calculatePlayerScore(player: GamePlayer): number {
   return Math.round(totalScore * 100) / 100;
 }
 
-export async function updateTeamRecords(): Promise<void> {
+export async function updateTeamRecords(season: string | null = CURRENT_SEASON): Promise<void> {
   try {
     // Get all games and teams
-    const [games, teams] = await Promise.all([
+    const [allGames, teams] = await Promise.all([
       getAllGames(),
       getAllTeams()
     ]);
+
+    // Filter games by season if specified
+    const games = season
+      ? allGames.filter(g => g.season === season)
+      : allGames;
 
     // Calculate records for each team
     const teamStats: {[teamName: string]: {wins: number, losses: number, pointsFor: number, pointsAgainst: number}} = {};
@@ -656,6 +672,7 @@ export async function updateTeamRecords(): Promise<void> {
         const winPercentage = totalGames > 0 ? Math.round((stats.wins / totalGames) * 100) : 0;
 
         await updateDoc(doc(db, 'teams', team.id), {
+          season: season || undefined, // Track which season these records are for
           wins: stats.wins,
           losses: stats.losses,
           winPercentage,
@@ -664,7 +681,7 @@ export async function updateTeamRecords(): Promise<void> {
           updatedAt: Timestamp.now()
         });
 
-        console.log(`Updated ${team.name}: ${stats.wins}-${stats.losses} (${winPercentage}%)`);
+        console.log(`Updated ${team.name} (${season || 'all seasons'}): ${stats.wins}-${stats.losses} (${winPercentage}%)`);
       }
     }
   } catch (error) {
@@ -690,6 +707,7 @@ type PlayerAgg = {
   assists: number;
   steals: number;
   blocks: number;
+  turnovers: number;
   minutes: number;
   fgm: number;
   fga: number;
@@ -702,16 +720,23 @@ type PlayerAgg = {
 };
 
 /**
- * Recalculate every player's season averages from ALL games in `games/*`.
- * This is useful after imports or data fixes where player season averages got out of sync.
+ * Recalculate every player's season averages from games in `games/*`.
+ * Optionally filter by season; defaults to CURRENT_SEASON.
+ * Pass null/undefined to include ALL seasons.
  */
-export async function recalculatePlayerAveragesFromGames(): Promise<{
+export async function recalculatePlayerAveragesFromGames(season: string | null = CURRENT_SEASON): Promise<{
   playersTotal: number;
   playersUpdated: number;
   playersSkipped: number;
+  season: string | null;
 }> {
   try {
-    const [players, games] = await Promise.all([getAllPlayers(), getAllGames()]);
+    const [players, allGames] = await Promise.all([getAllPlayers(), getAllGames()]);
+
+    // Filter games by season if specified
+    const games = season
+      ? allGames.filter(g => g.season === season)
+      : allGames;
 
     const aggs = new Map<string, PlayerAgg>();
     const getOrInit = (key: string): PlayerAgg => {
@@ -724,6 +749,7 @@ export async function recalculatePlayerAveragesFromGames(): Promise<{
         assists: 0,
         steals: 0,
         blocks: 0,
+        turnovers: 0,
         minutes: 0,
         fgm: 0,
         fga: 0,
@@ -753,6 +779,7 @@ export async function recalculatePlayerAveragesFromGames(): Promise<{
         agg.assists += perf.assists || 0;
         agg.steals += perf.steals || 0;
         agg.blocks += perf.blocks || 0;
+        agg.turnovers += perf.turnovers || 0;
         agg.minutes += perf.minutes || 0;
         agg.fgm += perf.fgm || 0;
         agg.fga += perf.fga || 0;
@@ -811,11 +838,13 @@ export async function recalculatePlayerAveragesFromGames(): Promise<{
 
       const updates: Partial<Player> = {
         gamesPlayed: gp,
+        season: season || undefined, // Track which season these averages are for
         points: roundTo((agg?.points || 0) / avgDiv, 2),
         rebounds: roundTo((agg?.rebounds || 0) / avgDiv, 2),
         assists: roundTo((agg?.assists || 0) / avgDiv, 2),
         steals: roundTo((agg?.steals || 0) / avgDiv, 2),
         blocks: roundTo((agg?.blocks || 0) / avgDiv, 2),
+        turnovers: roundTo((agg?.turnovers || 0) / avgDiv, 2),
         minutes: roundTo((agg?.minutes || 0) / avgDiv, 2),
         fgm: roundTo(fgmTotal / avgDiv, 2),
         fga: roundTo(fgaTotal / avgDiv, 2),
@@ -843,10 +872,188 @@ export async function recalculatePlayerAveragesFromGames(): Promise<{
     return {
       playersTotal: players.length,
       playersUpdated,
-      playersSkipped
+      playersSkipped,
+      season
     };
   } catch (error) {
     console.error('Error recalculating player averages:', error);
     throw error;
+  }
+}
+
+/**
+ * Bulk-update games that don't have a season field (or have a different season) to the specified season.
+ * Useful for migrating old data.
+ */
+export async function updateGamesWithSeason(
+  targetSeason: string,
+  options: { onlyMissingSeason?: boolean } = { onlyMissingSeason: true }
+): Promise<{ gamesTotal: number; gamesUpdated: number }> {
+  try {
+    const games = await getAllGames();
+    
+    let gamesUpdated = 0;
+    let batch = writeBatch(db);
+    let batchWrites = 0;
+
+    const commitBatchIfNeeded = async (force = false) => {
+      if (batchWrites === 0) return;
+      if (!force && batchWrites < 450) return;
+      await batch.commit();
+      batch = writeBatch(db);
+      batchWrites = 0;
+    };
+
+    for (const game of games) {
+      if (!game.id) continue;
+      
+      // Skip if game already has a season and we only want to update missing ones
+      if (options.onlyMissingSeason && game.season) {
+        continue;
+      }
+
+      batch.update(doc(db, 'games', game.id), {
+        season: targetSeason,
+        updatedAt: Timestamp.now()
+      });
+      batchWrites += 1;
+      gamesUpdated += 1;
+
+      await commitBatchIfNeeded(false);
+    }
+
+    await commitBatchIfNeeded(true);
+
+    console.log(`Updated ${gamesUpdated}/${games.length} games to season ${targetSeason}`);
+    
+    return {
+      gamesTotal: games.length,
+      gamesUpdated
+    };
+  } catch (error) {
+    console.error('Error updating games with season:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get player stats for a specific season by aggregating from game data.
+ * Returns computed averages for the given season.
+ */
+export async function getPlayerSeasonStats(playerId: string, season: string): Promise<{
+  gamesPlayed: number;
+  points: number;
+  rebounds: number;
+  assists: number;
+  steals: number;
+  blocks: number;
+  turnovers: number;
+  minutes: number;
+  fgm: number;
+  fga: number;
+  fgPercentage: number;
+  threePM: number;
+  threePA: number;
+  threePPercentage: number;
+  ftm: number;
+  fta: number;
+  ftPercentage: number;
+  efficiency: number;
+  playerScore: number;
+} | null> {
+  try {
+    const player = await getPlayer(playerId);
+    if (!player) return null;
+
+    const allGames = await getAllGames();
+    const seasonGames = allGames.filter(g => g.season === season);
+
+    // Find all performances for this player in the season
+    const performances: GamePlayer[] = [];
+    
+    for (const game of seasonGames) {
+      const perf = 
+        game.team1Players?.find(p => p.playerId === playerId || p.playerName.toLowerCase() === player.name.toLowerCase()) ||
+        game.team2Players?.find(p => p.playerId === playerId || p.playerName.toLowerCase() === player.name.toLowerCase());
+      
+      if (perf) {
+        performances.push(perf);
+      }
+    }
+
+    if (performances.length === 0) {
+      return {
+        gamesPlayed: 0,
+        points: 0,
+        rebounds: 0,
+        assists: 0,
+        steals: 0,
+        blocks: 0,
+        turnovers: 0,
+        minutes: 0,
+        fgm: 0,
+        fga: 0,
+        fgPercentage: 0,
+        threePM: 0,
+        threePA: 0,
+        threePPercentage: 0,
+        ftm: 0,
+        fta: 0,
+        ftPercentage: 0,
+        efficiency: 0,
+        playerScore: 0
+      };
+    }
+
+    // Aggregate stats
+    const totals = performances.reduce((acc, perf) => {
+      acc.points += perf.points || 0;
+      acc.rebounds += perf.rebounds || 0;
+      acc.assists += perf.assists || 0;
+      acc.steals += perf.steals || 0;
+      acc.blocks += perf.blocks || 0;
+      acc.turnovers += perf.turnovers || 0;
+      acc.minutes += perf.minutes || 0;
+      acc.fgm += perf.fgm || 0;
+      acc.fga += perf.fga || 0;
+      acc.threePM += perf.threePM || 0;
+      acc.threePA += perf.threePA || 0;
+      acc.ftm += perf.ftm || 0;
+      acc.fta += perf.fta || 0;
+      acc.efficiencySum += Number.isFinite(perf.efficiency) ? perf.efficiency : calculatePlayerEfficiency(perf);
+      acc.playerScoreSum += calculatePlayerScore(perf);
+      return acc;
+    }, {
+      points: 0, rebounds: 0, assists: 0, steals: 0, blocks: 0, turnovers: 0,
+      minutes: 0, fgm: 0, fga: 0, threePM: 0, threePA: 0, ftm: 0, fta: 0,
+      efficiencySum: 0, playerScoreSum: 0
+    });
+
+    const gp = performances.length;
+    
+    return {
+      gamesPlayed: gp,
+      points: roundTo(totals.points / gp, 2),
+      rebounds: roundTo(totals.rebounds / gp, 2),
+      assists: roundTo(totals.assists / gp, 2),
+      steals: roundTo(totals.steals / gp, 2),
+      blocks: roundTo(totals.blocks / gp, 2),
+      turnovers: roundTo(totals.turnovers / gp, 2),
+      minutes: roundTo(totals.minutes / gp, 2),
+      fgm: roundTo(totals.fgm / gp, 2),
+      fga: roundTo(totals.fga / gp, 2),
+      fgPercentage: roundTo(totals.fga > 0 ? totals.fgm / totals.fga : 0, 3),
+      threePM: roundTo(totals.threePM / gp, 2),
+      threePA: roundTo(totals.threePA / gp, 2),
+      threePPercentage: roundTo(totals.threePA > 0 ? totals.threePM / totals.threePA : 0, 3),
+      ftm: roundTo(totals.ftm / gp, 2),
+      fta: roundTo(totals.fta / gp, 2),
+      ftPercentage: roundTo(totals.fta > 0 ? totals.ftm / totals.fta : 0, 3),
+      efficiency: roundTo(totals.efficiencySum / gp, 2),
+      playerScore: roundTo(totals.playerScoreSum / gp, 2)
+    };
+  } catch (error) {
+    console.error('Error getting player season stats:', error);
+    return null;
   }
 }

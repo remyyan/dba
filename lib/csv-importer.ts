@@ -11,7 +11,8 @@ import {
   createTeam,
   calculatePlayerEfficiency,
   calculatePlayerScore,
-  updateTeamRecords
+  updateTeamRecords,
+  CURRENT_SEASON
 } from './firebase-data';
 import { addActivity } from './activities';
 
@@ -37,6 +38,7 @@ export interface CSVPlayerData {
   assists: number;
   steals: number;
   blocks: number;
+  turnovers: number;
   minutes: number;
   fgm: number;
   fga: number;
@@ -264,7 +266,8 @@ function parsePlayerRow(line: string, team: string): CSVPlayerData | null {
       fta: parseValue(parts[11]),
       steals: parseValue(parts[13]),
       blocks: parseValue(parts[14]),
-      minutes: parseValue(parts[15])
+      minutes: parseValue(parts[15]),
+      turnovers: parseValue(parts[16]) // New column at the end
     };
   } catch (error) {
     console.error('Error parsing player row:', line, error);
@@ -303,7 +306,7 @@ function isTeam2Player(playerName: string): boolean {
   return determineTeam(playerName) === 'Los Sigmas';
 }
 
-export async function importGameFromCSV(csvContent: string, importedBy: string): Promise<string> {
+export async function importGameFromCSV(csvContent: string, importedBy: string, season: string = CURRENT_SEASON): Promise<string> {
   try {
     const gameData = parseCSVContent(csvContent);
 
@@ -333,6 +336,7 @@ export async function importGameFromCSV(csvContent: string, importedBy: string):
         assists: csvPlayer.assists,
         steals: csvPlayer.steals,
         blocks: csvPlayer.blocks,
+        turnovers: csvPlayer.turnovers || 0,
         minutes: csvPlayer.minutes,
         fgm: csvPlayer.fgm,
         fga: csvPlayer.fga,
@@ -366,6 +370,7 @@ export async function importGameFromCSV(csvContent: string, importedBy: string):
     // Create game object
     const gameBase = {
       gameNumber: gameData.gameNumber,
+      season, // Include the season
       date: gameData.date,
       team1: 'Golden Dragons',
       team2: 'Los Sigmas',
@@ -438,6 +443,7 @@ async function updatePlayerAverages(csvPlayers: CSVPlayerData[]): Promise<void> 
         assists: csvPlayer.assists,
         steals: csvPlayer.steals,
         blocks: csvPlayer.blocks,
+        turnovers: csvPlayer.turnovers || 0,
         minutes: csvPlayer.minutes,
         fgm: csvPlayer.fgm,
         fga: csvPlayer.fga,
@@ -461,6 +467,7 @@ async function updatePlayerAverages(csvPlayers: CSVPlayerData[]): Promise<void> 
         assists: newPlayer.assists,
         steals: newPlayer.steals,
         blocks: newPlayer.blocks,
+        turnovers: newPlayer.turnovers,
         minutes: newPlayer.minutes,
         fgm: newPlayer.fgm,
         fga: newPlayer.fga,
@@ -483,6 +490,7 @@ async function updatePlayerAverages(csvPlayers: CSVPlayerData[]): Promise<void> 
         assists: newPlayer.assists,
         steals: newPlayer.steals,
         blocks: newPlayer.blocks,
+        turnovers: newPlayer.turnovers,
         minutes: newPlayer.minutes,
         fgm: newPlayer.fgm,
         fga: newPlayer.fga,
@@ -500,6 +508,7 @@ async function updatePlayerAverages(csvPlayers: CSVPlayerData[]): Promise<void> 
     } else {
       // Update existing player averages
       const games = existingPlayer.gamesPlayed + 1;
+      const existingTurnovers = existingPlayer.turnovers || 0;
       const updates: Partial<Player> = {
         gamesPlayed: games,
         team: csvPlayer.team, // Update team in case of trades
@@ -508,6 +517,7 @@ async function updatePlayerAverages(csvPlayers: CSVPlayerData[]): Promise<void> 
         assists: ((existingPlayer.assists * existingPlayer.gamesPlayed) + csvPlayer.assists) / games,
         steals: ((existingPlayer.steals * existingPlayer.gamesPlayed) + csvPlayer.steals) / games,
         blocks: ((existingPlayer.blocks * existingPlayer.gamesPlayed) + csvPlayer.blocks) / games,
+        turnovers: ((existingTurnovers * existingPlayer.gamesPlayed) + (csvPlayer.turnovers || 0)) / games,
         minutes: ((existingPlayer.minutes * existingPlayer.gamesPlayed) + csvPlayer.minutes) / games,
         fgm: ((existingPlayer.fgm * existingPlayer.gamesPlayed) + csvPlayer.fgm) / games,
         fga: ((existingPlayer.fga * existingPlayer.gamesPlayed) + csvPlayer.fga) / games,

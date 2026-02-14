@@ -4,37 +4,146 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { getAllPlayers } from "@/lib/firebase-data";
+import { getAllPlayers, getAllGames, calculatePlayerEfficiency, calculatePlayerScore, CURRENT_SEASON, ALL_SEASONS } from "@/lib/firebase-data";
 import Navigation from "@/components/Navigation";
 
 export default function PlayersPage() {
   const [players, setPlayers] = useState<any[]>([]);
+  const [games, setGames] = useState<any[]>([]);
+  const [computedPlayers, setComputedPlayers] = useState<any[]>([]);
   const [filteredPlayers, setFilteredPlayers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [teamFilter, setTeamFilter] = useState("All");
   const [positionFilter, setPositionFilter] = useState("All");
+  const [seasonFilter, setSeasonFilter] = useState(CURRENT_SEASON);
   const [sortBy, setSortBy] = useState("points");
   const [sortOrder, setSortOrder] = useState("desc");
 
   useEffect(() => {
-    const loadPlayers = async () => {
+    const loadData = async () => {
       try {
-        const playersData = await getAllPlayers();
+        const [playersData, gamesData] = await Promise.all([
+          getAllPlayers(),
+          getAllGames()
+        ]);
         setPlayers(playersData);
-        setFilteredPlayers(playersData);
+        setGames(gamesData);
       } catch (error) {
-        console.error('Error loading players:', error);
+        console.error('Error loading data:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    loadPlayers();
+    loadData();
   }, []);
 
+  // Compute player stats for the selected season
   useEffect(() => {
-    let filtered = players.filter(player => {
+    if (players.length === 0) {
+      setComputedPlayers([]);
+      return;
+    }
+
+    const seasonGames = games.filter(g => g.season === seasonFilter);
+    
+    // Build a map of player stats from games
+    const playerStatsMap = new Map<string, any>();
+    
+    for (const game of seasonGames) {
+      const allPerformances = [...(game.team1Players || []), ...(game.team2Players || [])];
+      
+      for (const perf of allPerformances) {
+        const key = perf.playerId || perf.playerName.toLowerCase();
+        const existing = playerStatsMap.get(key) || {
+          gamesPlayed: 0,
+          points: 0,
+          rebounds: 0,
+          assists: 0,
+          steals: 0,
+          blocks: 0,
+          turnovers: 0,
+          minutes: 0,
+          fgm: 0,
+          fga: 0,
+          threePM: 0,
+          threePA: 0,
+          ftm: 0,
+          fta: 0,
+          efficiencySum: 0,
+          playerScoreSum: 0
+        };
+        
+        existing.gamesPlayed += 1;
+        existing.points += perf.points || 0;
+        existing.rebounds += perf.rebounds || 0;
+        existing.assists += perf.assists || 0;
+        existing.steals += perf.steals || 0;
+        existing.blocks += perf.blocks || 0;
+        existing.turnovers += perf.turnovers || 0;
+        existing.minutes += perf.minutes || 0;
+        existing.fgm += perf.fgm || 0;
+        existing.fga += perf.fga || 0;
+        existing.threePM += perf.threePM || 0;
+        existing.threePA += perf.threePA || 0;
+        existing.ftm += perf.ftm || 0;
+        existing.fta += perf.fta || 0;
+        existing.efficiencySum += Number.isFinite(perf.efficiency) ? perf.efficiency : calculatePlayerEfficiency(perf);
+        existing.playerScoreSum += calculatePlayerScore(perf);
+        
+        playerStatsMap.set(key, existing);
+      }
+    }
+    
+    // Merge with player base info and compute averages
+    const computed = players.map(player => {
+      const key = player.id || player.name.toLowerCase();
+      const stats = playerStatsMap.get(key) || playerStatsMap.get(player.name.toLowerCase());
+      
+      if (!stats || stats.gamesPlayed === 0) {
+        return {
+          ...player,
+          gamesPlayed: 0,
+          points: 0,
+          rebounds: 0,
+          assists: 0,
+          steals: 0,
+          blocks: 0,
+          turnovers: 0,
+          minutes: 0,
+          fgPercentage: 0,
+          threePPercentage: 0,
+          ftPercentage: 0,
+          efficiency: 0,
+          playerScore: 0
+        };
+      }
+      
+      const gp = stats.gamesPlayed;
+      return {
+        ...player,
+        gamesPlayed: gp,
+        points: stats.points / gp,
+        rebounds: stats.rebounds / gp,
+        assists: stats.assists / gp,
+        steals: stats.steals / gp,
+        blocks: stats.blocks / gp,
+        turnovers: stats.turnovers / gp,
+        minutes: stats.minutes / gp,
+        fgPercentage: stats.fga > 0 ? stats.fgm / stats.fga : 0,
+        threePPercentage: stats.threePA > 0 ? stats.threePM / stats.threePA : 0,
+        ftPercentage: stats.fta > 0 ? stats.ftm / stats.fta : 0,
+        efficiency: stats.efficiencySum / gp,
+        playerScore: stats.playerScoreSum / gp
+      };
+    });
+    
+    setComputedPlayers(computed);
+  }, [players, games, seasonFilter]);
+
+  useEffect(() => {
+    let filtered = computedPlayers.filter(player => {
       const matchesSearch = player.name.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesTeam = teamFilter === "All" || player.team === teamFilter;
       const matchesPosition = positionFilter === "All" || player.position === positionFilter;
@@ -59,7 +168,7 @@ export default function PlayersPage() {
     });
 
     setFilteredPlayers(filtered);
-  }, [players, searchTerm, teamFilter, positionFilter, sortBy, sortOrder]);
+  }, [computedPlayers, searchTerm, teamFilter, positionFilter, sortBy, sortOrder]);
 
   const teams = ["All", "Golden Dragons", "Los Sigmas", "Free Agent"];
   const positions = ["All", "G", "F", "C"];
@@ -87,6 +196,28 @@ export default function PlayersPage() {
 
       <div className="max-w-7xl mx-auto px-4 py-8">
         <h1 className="text-4xl font-bold text-white mb-8 text-center">DBA Players</h1>
+
+        {/* Season Selector */}
+        <div className="bg-gradient-to-r from-orange-500/20 to-yellow-500/20 backdrop-blur-sm rounded-xl p-4 border border-orange-500/30 mb-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <span className="text-2xl">📅</span>
+              <div>
+                <h3 className="text-white font-semibold">Season Stats</h3>
+                <p className="text-gray-300 text-sm">Viewing averages for {seasonFilter}</p>
+              </div>
+            </div>
+            <select
+              value={seasonFilter}
+              onChange={(e) => setSeasonFilter(e.target.value)}
+              className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-orange-500"
+            >
+              {ALL_SEASONS.map(season => (
+                <option key={season} value={season} className="bg-slate-800">{season}</option>
+              ))}
+            </select>
+          </div>
+        </div>
 
         {/* Filters and Search */}
         <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20 mb-8">
@@ -143,6 +274,7 @@ export default function PlayersPage() {
                 <option value="rebounds" className="bg-slate-800">Rebounds</option>
                 <option value="assists" className="bg-slate-800">Assists</option>
                 <option value="efficiency" className="bg-slate-800">Efficiency</option>
+                <option value="playerScore" className="bg-slate-800">Player Score</option>
                 <option value="name" className="bg-slate-800">Name</option>
               </select>
             </div>
@@ -169,6 +301,10 @@ export default function PlayersPage() {
                   <div className="flex justify-between">
                     <span className="text-gray-300">Team:</span>
                     <span className="text-white font-medium">{player.team}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-300">Games:</span>
+                    <span className="text-white font-medium">{player.gamesPlayed || 0}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-300">PPG:</span>

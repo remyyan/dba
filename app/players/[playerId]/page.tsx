@@ -5,16 +5,18 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { getPlayer, getPlayerGameHistory } from "@/lib/firebase-data";
+import { getPlayer, getPlayerGameHistory, getPlayerSeasonStats, CURRENT_SEASON, ALL_SEASONS } from "@/lib/firebase-data";
 import Navigation from "@/components/Navigation";
 
 export default function PlayerDetailPage() {
   const params = useParams();
   const playerId = params.playerId as string;
   const [player, setPlayer] = useState<any>(null);
+  const [seasonStats, setSeasonStats] = useState<any>(null);
   const [gameHistory, setGameHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'stats' | 'games'>('stats');
+  const [selectedSeason, setSelectedSeason] = useState(CURRENT_SEASON);
 
   useEffect(() => {
     const loadPlayerData = async () => {
@@ -41,6 +43,26 @@ export default function PlayerDetailPage() {
       loadPlayerData();
     }
   }, [playerId]);
+
+  // Load season-specific stats when season changes
+  useEffect(() => {
+    const loadSeasonStats = async () => {
+      if (!playerId) return;
+      
+      try {
+        const stats = await getPlayerSeasonStats(playerId, selectedSeason);
+        setSeasonStats(stats);
+      } catch (error) {
+        console.error('Error loading season stats:', error);
+        setSeasonStats(null);
+      }
+    };
+
+    loadSeasonStats();
+  }, [playerId, selectedSeason]);
+
+  // Use season stats if available, otherwise fall back to player stored stats
+  const displayStats = seasonStats || player || {};
 
   if (loading) {
     return (
@@ -123,9 +145,31 @@ export default function PlayerDetailPage() {
             </div>
 
             <div className="text-center">
-              <div className="text-3xl font-bold text-white">{(player.points || 0).toFixed(1)}</div>
-              <div className="text-orange-400 text-sm">PPG</div>
+              <div className="text-3xl font-bold text-white">{(displayStats.points || 0).toFixed(1)}</div>
+              <div className="text-orange-400 text-sm">PPG ({selectedSeason})</div>
             </div>
+          </div>
+        </div>
+
+        {/* Season Selector */}
+        <div className="bg-gradient-to-r from-orange-500/20 to-yellow-500/20 backdrop-blur-sm rounded-xl p-4 border border-orange-500/30 mb-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <span className="text-2xl">📅</span>
+              <div>
+                <h3 className="text-white font-semibold">Season Stats</h3>
+                <p className="text-gray-300 text-sm">Viewing averages for {selectedSeason}</p>
+              </div>
+            </div>
+            <select
+              value={selectedSeason}
+              onChange={(e) => setSelectedSeason(e.target.value)}
+              className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-orange-500"
+            >
+              {ALL_SEASONS.map(season => (
+                <option key={season} value={season} className="bg-slate-800">{season}</option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -158,31 +202,35 @@ export default function PlayerDetailPage() {
               <div className="space-y-4">
                 <div className="flex justify-between">
                   <span className="text-gray-300">Points per Game</span>
-                  <span className="text-white font-bold">{(player.points || 0).toFixed(1)}</span>
+                  <span className="text-white font-bold">{(displayStats.points || 0).toFixed(1)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-300">Field Goals Made</span>
-                  <span className="text-white font-bold">{(player.fgm || 0).toFixed(1)}</span>
+                  <span className="text-white font-bold">{(displayStats.fgm || 0).toFixed(1)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-300">Field Goal %</span>
-                  <span className="text-white font-bold">{((player.fgPercentage || 0) * 100).toFixed(1)}%</span>
+                  <span className="text-white font-bold">{((displayStats.fgPercentage || 0) * 100).toFixed(1)}%</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-300">3-Pointers Made</span>
-                  <span className="text-white font-bold">{(player.threePM || 0).toFixed(1)}</span>
+                  <span className="text-white font-bold">{(displayStats.threePM || 0).toFixed(1)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-300">3-Point %</span>
-                  <span className="text-white font-bold">{((player.threePPercentage || 0) * 100).toFixed(1)}%</span>
+                  <span className="text-white font-bold">{((displayStats.threePPercentage || 0) * 100).toFixed(1)}%</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-300">Free Throw %</span>
-                  <span className="text-white font-bold">{((player.ftPercentage || 0) * 100).toFixed(1)}%</span>
+                  <span className="text-white font-bold">{((displayStats.ftPercentage || 0) * 100).toFixed(1)}%</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-300">Assists per Game</span>
-                  <span className="text-white font-bold">{(player.assists || 0).toFixed(1)}</span>
+                  <span className="text-white font-bold">{(displayStats.assists || 0).toFixed(1)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-300">Turnovers per Game</span>
+                  <span className="text-white font-bold">{(displayStats.turnovers || 0).toFixed(1)}</span>
                 </div>
               </div>
             </div>
@@ -193,31 +241,31 @@ export default function PlayerDetailPage() {
               <div className="space-y-4">
                 <div className="flex justify-between">
                   <span className="text-gray-300">Rebounds per Game</span>
-                  <span className="text-white font-bold">{(player.rebounds || 0).toFixed(1)}</span>
+                  <span className="text-white font-bold">{(displayStats.rebounds || 0).toFixed(1)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-300">Steals per Game</span>
-                  <span className="text-white font-bold">{(player.steals || 0).toFixed(1)}</span>
+                  <span className="text-white font-bold">{(displayStats.steals || 0).toFixed(1)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-300">Blocks per Game</span>
-                  <span className="text-white font-bold">{(player.blocks || 0).toFixed(1)}</span>
+                  <span className="text-white font-bold">{(displayStats.blocks || 0).toFixed(1)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-300">Minutes per Game</span>
-                  <span className="text-white font-bold">{(player.minutes || 0).toFixed(1)}</span>
+                  <span className="text-white font-bold">{(displayStats.minutes || 0).toFixed(1)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-300">Games Played</span>
-                  <span className="text-white font-bold">{player.gamesPlayed || 0}</span>
+                  <span className="text-white font-bold">{displayStats.gamesPlayed || 0}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-300">Efficiency Rating</span>
-                  <span className="text-white font-bold">{(player.efficiency || 0).toFixed(1)}</span>
+                  <span className="text-white font-bold">{(displayStats.efficiency || 0).toFixed(1)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-300">Player Score</span>
-                  <span className="text-white font-bold">{(player.playerScore || 0).toFixed(1)}</span>
+                  <span className="text-white font-bold">{(displayStats.playerScore || 0).toFixed(1)}</span>
                 </div>
               </div>
             </div>

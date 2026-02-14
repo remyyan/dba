@@ -2,18 +2,20 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { getAllGames } from "@/lib/firebase-data";
+import { getAllGames, CURRENT_SEASON, ALL_SEASONS } from "@/lib/firebase-data";
 import Navigation from "@/components/Navigation";
 
 export default function GamesPage() {
-  const [games, setGames] = useState<any[]>([]);
+  const [allGames, setAllGames] = useState<any[]>([]);
+  const [filteredGames, setFilteredGames] = useState<any[]>([]);
+  const [selectedSeason, setSelectedSeason] = useState(CURRENT_SEASON);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const loadGames = async () => {
       try {
         const gamesData = await getAllGames();
-        setGames(gamesData.reverse()); // Most recent first
+        setAllGames(gamesData);
       } catch (error) {
         console.error('Error loading games:', error);
       } finally {
@@ -23,6 +25,12 @@ export default function GamesPage() {
 
     loadGames();
   }, []);
+
+  // Filter games by selected season
+  useEffect(() => {
+    const seasonGames = allGames.filter(g => g.season === selectedSeason);
+    setFilteredGames(seasonGames.reverse()); // Most recent first
+  }, [allGames, selectedSeason]);
 
   if (loading) {
     return (
@@ -42,8 +50,36 @@ export default function GamesPage() {
       <div className="max-w-7xl mx-auto px-4 py-8">
         <h1 className="text-4xl font-bold text-white mb-8 text-center">Game History</h1>
 
+        {/* Season Selector */}
+        <div className="bg-gradient-to-r from-orange-500/20 to-yellow-500/20 backdrop-blur-sm rounded-xl p-4 border border-orange-500/30 mb-8">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <span className="text-2xl">📅</span>
+              <div>
+                <h3 className="text-white font-semibold">Season</h3>
+                <p className="text-gray-300 text-sm">Viewing games from {selectedSeason}</p>
+              </div>
+            </div>
+            <select
+              value={selectedSeason}
+              onChange={(e) => setSelectedSeason(e.target.value)}
+              className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-orange-500"
+            >
+              {ALL_SEASONS.map(season => (
+                <option key={season} value={season} className="bg-slate-800">{season}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {filteredGames.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-gray-400 text-lg">No games found for {selectedSeason}.</p>
+            <p className="text-gray-500 text-sm mt-2">Try selecting a different season or import games in the Admin Panel.</p>
+          </div>
+        ) : (
         <div className="space-y-6">
-          {games.map((game) => (
+          {filteredGames.map((game) => (
             <Link key={game.gameNumber} href={`/games/${game.gameNumber}`}>
               <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20 hover:bg-white/20 transition-all cursor-pointer">
                 <div className="flex items-center justify-between">
@@ -127,6 +163,7 @@ export default function GamesPage() {
             </Link>
           ))}
         </div>
+        )}
 
         <div className="text-center mt-8">
           <Link

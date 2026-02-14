@@ -2,18 +2,24 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { getAllTeams, getPlayersByTeam, getAllPlayers, createTeam } from "@/lib/firebase-data";
+import { getAllTeams, getAllPlayers, getAllGames, createTeam, CURRENT_SEASON, ALL_SEASONS } from "@/lib/firebase-data";
 import Navigation from "@/components/Navigation";
 
 export default function TeamsPage() {
   const [teams, setTeams] = useState<any[]>([]);
+  const [allGames, setAllGames] = useState<any[]>([]);
   const [teamPlayers, setTeamPlayers] = useState<{[key: string]: any[]}>({});
+  const [teamRecords, setTeamRecords] = useState<{[key: string]: {wins: number, losses: number, winPercentage: number}}>({});
+  const [selectedSeason, setSelectedSeason] = useState(CURRENT_SEASON);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        let teamsData = await getAllTeams();
+        let [teamsData, gamesData] = await Promise.all([
+          getAllTeams(),
+          getAllGames()
+        ]);
         console.log('Loaded teams from Firebase:', teamsData);
 
         // If no teams exist, create default teams
@@ -46,6 +52,7 @@ export default function TeamsPage() {
         );
 
         setTeams(uniqueTeams);
+        setAllGames(gamesData);
 
         // Load all players and filter by team
         const allPlayers = await getAllPlayers();
@@ -69,6 +76,36 @@ export default function TeamsPage() {
     loadData();
   }, []);
 
+  // Compute team records for selected season
+  useEffect(() => {
+    const seasonGames = allGames.filter(g => g.season === selectedSeason);
+    const records: {[key: string]: {wins: number, losses: number, winPercentage: number}} = {};
+
+    for (const team of teams) {
+      records[team.name] = { wins: 0, losses: 0, winPercentage: 0 };
+    }
+
+    for (const game of seasonGames) {
+      if (records[game.team1] && records[game.team2]) {
+        if (game.team1Score > game.team2Score) {
+          records[game.team1].wins++;
+          records[game.team2].losses++;
+        } else if (game.team2Score > game.team1Score) {
+          records[game.team2].wins++;
+          records[game.team1].losses++;
+        }
+      }
+    }
+
+    // Calculate win percentages
+    for (const teamName of Object.keys(records)) {
+      const total = records[teamName].wins + records[teamName].losses;
+      records[teamName].winPercentage = total > 0 ? Math.round((records[teamName].wins / total) * 100) : 0;
+    }
+
+    setTeamRecords(records);
+  }, [allGames, teams, selectedSeason]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
@@ -87,9 +124,33 @@ export default function TeamsPage() {
       <div className="max-w-7xl mx-auto px-4 py-8">
         <h1 className="text-4xl font-bold text-white mb-8 text-center">DBA Teams</h1>
 
+        {/* Season Selector */}
+        <div className="bg-gradient-to-r from-orange-500/20 to-yellow-500/20 backdrop-blur-sm rounded-xl p-4 border border-orange-500/30 mb-8">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <span className="text-2xl">📅</span>
+              <div>
+                <h3 className="text-white font-semibold">Season Records</h3>
+                <p className="text-gray-300 text-sm">Viewing standings for {selectedSeason}</p>
+              </div>
+            </div>
+            <select
+              value={selectedSeason}
+              onChange={(e) => setSelectedSeason(e.target.value)}
+              className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-orange-500"
+            >
+              {ALL_SEASONS.map(season => (
+                <option key={season} value={season} className="bg-slate-800">{season}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         <div className="grid md:grid-cols-2 gap-8">
-          {teams.map((team) => (
-            <Link key={team.name} href={`/teams/${encodeURIComponent(team.name)}`}>
+          {teams.map((team) => {
+            const record = teamRecords[team.name] || { wins: 0, losses: 0, winPercentage: 0 };
+            return (
+            <Link key={team.name} href={`/teams/${encodeURIComponent(team.name)}?season=${selectedSeason}`}>
               <div className={`bg-white/10 backdrop-blur-sm rounded-xl p-8 border border-white/20 hover:bg-white/20 transition-all cursor-pointer ${
                 team.name === 'Golden Dragons' ? 'hover:border-yellow-400' : 'hover:border-red-400'
               }`}>
@@ -101,7 +162,7 @@ export default function TeamsPage() {
                   </div>
                   <h2 className="text-3xl font-bold text-white mb-2">{team.name}</h2>
                   <p className="text-gray-300 text-xl mb-4">
-                    {team.wins || 0}-{team.losses || 0} ({Math.round(team.winPercentage || 0)}%)
+                    {record.wins}-{record.losses} ({record.winPercentage}%)
                   </p>
                 </div>
 
@@ -132,7 +193,8 @@ export default function TeamsPage() {
                 </div>
               </div>
             </Link>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { getAllTeams, getAllPlayers, addNewPlayer, updatePlayer, transferPlayer, cleanupQuarterPlayers, cleanupDuplicateTeams, updateTeamRecords, recalculatePlayerAveragesFromGames } from '@/lib/firebase-data';
+import { getAllTeams, getAllPlayers, addNewPlayer, updatePlayer, transferPlayer, cleanupQuarterPlayers, cleanupDuplicateTeams, updateTeamRecords, recalculatePlayerAveragesFromGames, updateGamesWithSeason, CURRENT_SEASON, ALL_SEASONS } from '@/lib/firebase-data';
 import { addActivity } from '@/lib/activities';
 import { importGameFromCSV } from '@/lib/csv-importer';
 import Navigation from '@/components/Navigation';
@@ -41,6 +41,7 @@ export default function AdminPage() {
   // CSV Import states
   const [, setCsvFile] = useState<File | null>(null);
   const [csvContent, setCsvContent] = useState('');
+  const [selectedSeason, setSelectedSeason] = useState(CURRENT_SEASON);
 
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState('');
@@ -115,6 +116,7 @@ export default function AdminPage() {
         assists: 0,
         steals: 0,
         blocks: 0,
+        turnovers: 0,
         minutes: 0,
         fgm: 0,
         fga: 0,
@@ -326,8 +328,8 @@ export default function AdminPage() {
     setMessage('');
 
     try {
-      const gameId = await importGameFromCSV(csvContent, user?.email || 'admin');
-      setMessage(`Successfully imported game! Game ID: ${gameId}`);
+      const gameId = await importGameFromCSV(csvContent, user?.email || 'admin', selectedSeason);
+      setMessage(`Successfully imported game for ${selectedSeason}! Game ID: ${gameId}`);
       setCsvContent('');
       setCsvFile(null);
 
@@ -387,8 +389,8 @@ export default function AdminPage() {
     setMessage('');
 
     try {
-      await updateTeamRecords();
-      setMessage('Successfully recalculated team records from all games!');
+      await updateTeamRecords(selectedSeason);
+      setMessage(`Successfully recalculated team records for ${selectedSeason}!`);
 
       // Reload data
       await loadData();
@@ -405,13 +407,31 @@ export default function AdminPage() {
     setMessage('');
 
     try {
-      const result = await recalculatePlayerAveragesFromGames();
-      setMessage(`Successfully recalculated player averages from all games! Updated ${result.playersUpdated}/${result.playersTotal} players.`);
+      const result = await recalculatePlayerAveragesFromGames(selectedSeason);
+      setMessage(`Successfully recalculated player averages for ${selectedSeason}! Updated ${result.playersUpdated}/${result.playersTotal} players.`);
 
       // Reload data
       await loadData();
     } catch (error) {
       setMessage('Error recalculating player averages.');
+      console.error('Error:', error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleMigrateGamesToSeason = async () => {
+    setSubmitting(true);
+    setMessage('');
+
+    try {
+      const result = await updateGamesWithSeason(selectedSeason, { onlyMissingSeason: true });
+      setMessage(`Successfully tagged ${result.gamesUpdated}/${result.gamesTotal} games with season ${selectedSeason}!`);
+
+      // Reload data
+      await loadData();
+    } catch (error) {
+      setMessage('Error migrating games to season.');
       console.error('Error:', error);
     } finally {
       setSubmitting(false);
@@ -477,13 +497,29 @@ export default function AdminPage() {
                   <h3 className="text-blue-300 font-semibold mb-2">CSV Format Requirements:</h3>
                   <ul className="text-blue-200 text-sm space-y-1">
                     <li>• Use the same format as your existing Game1.csv, Game2.csv, Game3.csv files</li>
-                    <li>• Player stats should include: Points, Rebounds, Assists, FGM, FGA, 3PM, 3PA, FTM, FTA, STL, BLK, MIN</li>
+                    <li>• Player stats should include: Points, Rebounds, Assists, FGM, FGA, 3PM, 3PA, FTM, FTA, STL, BLK, MIN, TOV</li>
+                    <li>• Turnovers (TOV) should be in the last column for the 2026-2027 season</li>
                     <li>• System will auto-calculate averages, efficiency, and player scores</li>
                     <li>• Player of the Game will be automatically determined</li>
                   </ul>
                 </div>
 
                 <form onSubmit={handleCSVImport} className="space-y-4">
+                  <div>
+                    <label className="block text-white font-medium mb-2">Season</label>
+                    <select
+                      value={selectedSeason}
+                      onChange={(e) => setSelectedSeason(e.target.value)}
+                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-orange-400"
+                    >
+                      {ALL_SEASONS.map((season) => (
+                        <option key={season} value={season} className="bg-slate-800">
+                          {season}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   <div>
                     <label className="block text-white font-medium mb-2">Select CSV File</label>
                     <input
@@ -540,16 +576,30 @@ export default function AdminPage() {
                       disabled={submitting}
                       className="w-full bg-green-500 hover:bg-green-600 disabled:bg-green-500/50 text-white px-8 py-3 rounded-lg font-semibold transition-colors"
                     >
-                      {submitting ? 'Calculating...' : 'Recalculate Team Records'}
+                      {submitting ? 'Calculating...' : `Recalculate Team Records (${selectedSeason})`}
                     </button>
                     <button
                       onClick={handleRecalculatePlayerAverages}
                       disabled={submitting}
                       className="w-full bg-green-500 hover:bg-green-600 disabled:bg-green-500/50 text-white px-8 py-3 rounded-lg font-semibold transition-colors"
                     >
-                      {submitting ? 'Calculating...' : 'Recalculate Player Averages'}
+                      {submitting ? 'Calculating...' : `Recalculate Player Averages (${selectedSeason})`}
                     </button>
                   </div>
+                </div>
+
+                <div className="mt-6 pt-6 border-t border-white/20">
+                  <h4 className="text-white font-semibold mb-2">Data Migration</h4>
+                  <p className="text-gray-400 text-sm mb-3">
+                    Tag existing games with a season (only updates games without a season field)
+                  </p>
+                  <button
+                    onClick={handleMigrateGamesToSeason}
+                    disabled={submitting}
+                    className="w-full bg-purple-500 hover:bg-purple-600 disabled:bg-purple-500/50 text-white px-8 py-3 rounded-lg font-semibold transition-colors"
+                  >
+                    {submitting ? 'Migrating...' : `Tag Untagged Games as ${selectedSeason}`}
+                  </button>
                 </div>
               </div>
             </div>
