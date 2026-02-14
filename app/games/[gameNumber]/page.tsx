@@ -32,6 +32,18 @@ export default function GamePage({ params }: GamePageProps) {
             ...player,
             playerScore: calculatePlayerScore(player)
           }));
+          
+          // Recalculate POTG score if exists
+          if (gameData.playerOfTheGame) {
+            const allPlayers = [...gameData.team1Players, ...gameData.team2Players];
+            const potg = gameData.playerOfTheGame;
+            const potgPlayer = allPlayers.find(
+              (p: any) => p.playerName === potg.playerName || p.playerId === potg.playerId
+            );
+            if (potgPlayer) {
+              gameData.playerOfTheGame.score = (potgPlayer as any).playerScore;
+            }
+          }
         }
         setGame(gameData);
       } catch (error) {
@@ -217,6 +229,7 @@ export default function GamePage({ params }: GamePageProps) {
                   <th className="text-center text-orange-400 font-semibold py-2">FT%</th>
                   <th className="text-center text-orange-400 font-semibold py-2">STL</th>
                   <th className="text-center text-orange-400 font-semibold py-2">BLK</th>
+                  <th className="text-center text-orange-400 font-semibold py-2">TOV</th>
                   <th className="text-center text-orange-400 font-semibold py-2">MIN</th>
                   <th className="text-center text-orange-400 font-semibold py-2">Score</th>
                 </tr>
@@ -247,6 +260,7 @@ export default function GamePage({ params }: GamePageProps) {
                     <td className="text-center text-gray-300 py-2">{player.fta === 0 ? "0%" : formatPercentage(player.ftPercentage)}</td>
                     <td className="text-center text-gray-300 py-2">{formatStat(player.steals)}</td>
                     <td className="text-center text-gray-300 py-2">{formatStat(player.blocks)}</td>
+                    <td className="text-center text-gray-300 py-2">{formatStat(player.turnovers || 0)}</td>
                     <td className="text-center text-gray-300 py-2">{formatStat(player.minutes)}</td>
                     <td className="text-center text-gray-300 py-2">{player.playerScore?.toFixed(1) || '-'}</td>
                   </tr>
@@ -283,6 +297,7 @@ export default function GamePage({ params }: GamePageProps) {
                   <th className="text-center text-orange-400 font-semibold py-2">FT%</th>
                   <th className="text-center text-orange-400 font-semibold py-2">STL</th>
                   <th className="text-center text-orange-400 font-semibold py-2">BLK</th>
+                  <th className="text-center text-orange-400 font-semibold py-2">TOV</th>
                   <th className="text-center text-orange-400 font-semibold py-2">MIN</th>
                   <th className="text-center text-orange-400 font-semibold py-2">Score</th>
                 </tr>
@@ -313,6 +328,7 @@ export default function GamePage({ params }: GamePageProps) {
                     <td className="text-center text-gray-300 py-2">{player.fta === 0 ? "0%" : formatPercentage(player.ftPercentage)}</td>
                     <td className="text-center text-gray-300 py-2">{formatStat(player.steals)}</td>
                     <td className="text-center text-gray-300 py-2">{formatStat(player.blocks)}</td>
+                    <td className="text-center text-gray-300 py-2">{formatStat(player.turnovers || 0)}</td>
                     <td className="text-center text-gray-300 py-2">{formatStat(player.minutes)}</td>
                     <td className="text-center text-gray-300 py-2">{player.playerScore?.toFixed(1) || '-'}</td>
                   </tr>

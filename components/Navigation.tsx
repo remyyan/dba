@@ -13,6 +13,7 @@ export default function Navigation() {
     { href: "/teams", label: "Teams" },
     { href: "/players", label: "Players" },
     { href: "/games", label: "Games" },
+    { href: "/stats", label: "Stats" },
   ];
 
   const handleLogout = async () => {

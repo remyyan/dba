@@ -571,6 +571,7 @@ export function calculatePlayerScore(player: GamePlayer): number {
   const assistScore = player.assists * 1.5;
   const stealScore = player.steals * 3.0;
   const blockScore = player.blocks * 3.0;
+  const turnoverPenalty = (player.turnovers || 0) * -2.0; // Turnovers hurt your score
 
   // Shooting efficiency bonuses/penalties
   const fgEfficiencyBonus = player.fgPercentage > 0.5 ? player.points * 0.3 :
@@ -601,6 +602,7 @@ export function calculatePlayerScore(player: GamePlayer): number {
     assistScore +
     stealScore +
     blockScore +
+    turnoverPenalty +
     fgEfficiencyBonus +
     threePointBonus +
     ftEfficiencyBonus +

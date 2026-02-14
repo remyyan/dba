@@ -64,6 +64,9 @@ export default function PlayerDetailPage() {
   // Use season stats if available, otherwise fall back to player stored stats
   const displayStats = seasonStats || player || {};
 
+  // Filter game history by selected season
+  const filteredGameHistory = gameHistory.filter(game => game.season === selectedSeason);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center">
@@ -275,8 +278,8 @@ export default function PlayerDetailPage() {
         {/* Game Log Tab */}
         {activeTab === 'games' && (
           <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20">
-            <h3 className="text-xl font-bold text-white mb-6">Game Log</h3>
-            {gameHistory.length > 0 ? (
+            <h3 className="text-xl font-bold text-white mb-6">Game Log ({selectedSeason})</h3>
+            {filteredGameHistory.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
@@ -303,7 +306,7 @@ export default function PlayerDetailPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {gameHistory.map((game, index) => (
+                    {filteredGameHistory.map((game, index) => (
                       <tr key={index} className="border-b border-white/10 hover:bg-white/5">
                         <td className="text-white py-3">
                           <Link href={`/games/${game.gameNumber}`} className="hover:text-orange-400 transition-colors">
@@ -335,7 +338,7 @@ export default function PlayerDetailPage() {
               </div>
             ) : (
               <div className="text-center py-8">
-                <p className="text-gray-400">No game history available for this player.</p>
+                <p className="text-gray-400">No games found for {selectedSeason}.</p>
               </div>
             )}
           </div>
