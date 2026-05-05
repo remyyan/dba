@@ -73,13 +73,48 @@ export default function GamePage({ params }: GamePageProps) {
   }
 
   const formatPercentage = (value: number) => {
-    if (value === 0) return "0.00";
+    if (!value || value === 0) return "0%";
     return (value * 100).toFixed(0) + "%";
   };
 
   const formatStat = (value: number) => {
     return value === 0 ? "0" : value.toString();
   };
+
+  // Calculate team totals
+  const calculateTeamTotals = (players: any[]) => {
+    const totals = {
+      points: 0, rebounds: 0, assists: 0, steals: 0, blocks: 0, turnovers: 0,
+      fgm: 0, fga: 0, threePM: 0, threePA: 0, ftm: 0, fta: 0, minutes: 0, playerScore: 0
+    };
+    
+    for (const p of players) {
+      totals.points += p.points || 0;
+      totals.rebounds += p.rebounds || 0;
+      totals.assists += p.assists || 0;
+      totals.steals += p.steals || 0;
+      totals.blocks += p.blocks || 0;
+      totals.turnovers += p.turnovers || 0;
+      totals.fgm += p.fgm || 0;
+      totals.fga += p.fga || 0;
+      totals.threePM += p.threePM || 0;
+      totals.threePA += p.threePA || 0;
+      totals.ftm += p.ftm || 0;
+      totals.fta += p.fta || 0;
+      totals.minutes += p.minutes || 0;
+      totals.playerScore += p.playerScore || 0;
+    }
+    
+    return {
+      ...totals,
+      fgPercentage: totals.fga > 0 ? totals.fgm / totals.fga : 0,
+      threePPercentage: totals.threePA > 0 ? totals.threePM / totals.threePA : 0,
+      ftPercentage: totals.fta > 0 ? totals.ftm / totals.fta : 0
+    };
+  };
+
+  const team1Totals = game ? calculateTeamTotals(game.team1Players || []) : null;
+  const team2Totals = game ? calculateTeamTotals(game.team2Players || []) : null;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
@@ -176,26 +211,40 @@ export default function GamePage({ params }: GamePageProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="border-b border-white/10">
-                    <td className="text-white font-semibold py-3">{game.team1}</td>
-                    <td className="text-center text-gray-300 py-3">{game.quarters.q1.team1}</td>
-                    <td className="text-center text-gray-300 py-3">{game.quarters.q2.team1}</td>
-                    <td className="text-center text-gray-300 py-3">
-                      {game.quarters.q3.team1 === 0 && game.quarters.q3.team2 === 0 ? '?' : game.quarters.q3.team1}
-                    </td>
-                    <td className="text-center text-gray-300 py-3">{game.quarters.q4.team1}</td>
-                    <td className="text-center text-white font-bold py-3">{game.team1Score}</td>
-                  </tr>
-                  <tr>
-                    <td className="text-white font-semibold py-3">{game.team2}</td>
-                    <td className="text-center text-gray-300 py-3">{game.quarters.q1.team2}</td>
-                    <td className="text-center text-gray-300 py-3">{game.quarters.q2.team2}</td>
-                    <td className="text-center text-gray-300 py-3">
-                      {game.quarters.q3.team1 === 0 && game.quarters.q3.team2 === 0 ? '?' : game.quarters.q3.team2}
-                    </td>
-                    <td className="text-center text-gray-300 py-3">{game.quarters.q4.team2}</td>
-                    <td className="text-center text-white font-bold py-3">{game.team2Score}</td>
-                  </tr>
+                  {(() => {
+                    // Calculate points scored per quarter (data is stored as cumulative)
+                    const q = game.quarters;
+                    const q1t1 = q.q1?.team1 || 0;
+                    const q1t2 = q.q1?.team2 || 0;
+                    const q2t1 = (q.q2?.team1 || 0) - q1t1;
+                    const q2t2 = (q.q2?.team2 || 0) - q1t2;
+                    const q3t1 = (q.q3?.team1 || 0) - (q.q2?.team1 || 0);
+                    const q3t2 = (q.q3?.team2 || 0) - (q.q2?.team2 || 0);
+                    const q4t1 = (q.q4?.team1 || 0) - (q.q3?.team1 || 0);
+                    const q4t2 = (q.q4?.team2 || 0) - (q.q3?.team2 || 0);
+                    const q3Missing = q.q3?.team1 === 0 && q.q3?.team2 === 0;
+                    
+                    return (
+                      <>
+                        <tr className="border-b border-white/10">
+                          <td className="text-white font-semibold py-3">{game.team1}</td>
+                          <td className="text-center text-gray-300 py-3">{q1t1}</td>
+                          <td className="text-center text-gray-300 py-3">{q2t1}</td>
+                          <td className="text-center text-gray-300 py-3">{q3Missing ? '?' : q3t1}</td>
+                          <td className="text-center text-gray-300 py-3">{q4t1}</td>
+                          <td className="text-center text-white font-bold py-3">{game.team1Score}</td>
+                        </tr>
+                        <tr>
+                          <td className="text-white font-semibold py-3">{game.team2}</td>
+                          <td className="text-center text-gray-300 py-3">{q1t2}</td>
+                          <td className="text-center text-gray-300 py-3">{q2t2}</td>
+                          <td className="text-center text-gray-300 py-3">{q3Missing ? '?' : q3t2}</td>
+                          <td className="text-center text-gray-300 py-3">{q4t2}</td>
+                          <td className="text-center text-white font-bold py-3">{game.team2Score}</td>
+                        </tr>
+                      </>
+                    );
+                  })()}
                 </tbody>
               </table>
             </div>
@@ -266,6 +315,30 @@ export default function GamePage({ params }: GamePageProps) {
                   </tr>
                 ))}
               </tbody>
+              {team1Totals && (
+                <tfoot>
+                  <tr className="border-t-2 border-orange-400 bg-white/5 font-bold">
+                    <td className="text-orange-400 py-3">TOTAL</td>
+                    <td className="text-center text-white py-3">{team1Totals.points}</td>
+                    <td className="text-center text-white py-3">{team1Totals.rebounds}</td>
+                    <td className="text-center text-white py-3">{team1Totals.assists}</td>
+                    <td className="text-center text-white py-3">{team1Totals.fgm}</td>
+                    <td className="text-center text-white py-3">{team1Totals.fga}</td>
+                    <td className="text-center text-white py-3">{formatPercentage(team1Totals.fgPercentage)}</td>
+                    <td className="text-center text-white py-3">{team1Totals.threePM}</td>
+                    <td className="text-center text-white py-3">{team1Totals.threePA}</td>
+                    <td className="text-center text-white py-3">{formatPercentage(team1Totals.threePPercentage)}</td>
+                    <td className="text-center text-white py-3">{team1Totals.ftm}</td>
+                    <td className="text-center text-white py-3">{team1Totals.fta}</td>
+                    <td className="text-center text-white py-3">{formatPercentage(team1Totals.ftPercentage)}</td>
+                    <td className="text-center text-white py-3">{team1Totals.steals}</td>
+                    <td className="text-center text-white py-3">{team1Totals.blocks}</td>
+                    <td className="text-center text-white py-3">{team1Totals.turnovers}</td>
+                    <td className="text-center text-white py-3">{team1Totals.minutes}</td>
+                    <td className="text-center text-white py-3">{team1Totals.playerScore.toFixed(1)}</td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </div>
@@ -334,6 +407,30 @@ export default function GamePage({ params }: GamePageProps) {
                   </tr>
                 ))}
               </tbody>
+              {team2Totals && (
+                <tfoot>
+                  <tr className="border-t-2 border-orange-400 bg-white/5 font-bold">
+                    <td className="text-orange-400 py-3">TOTAL</td>
+                    <td className="text-center text-white py-3">{team2Totals.points}</td>
+                    <td className="text-center text-white py-3">{team2Totals.rebounds}</td>
+                    <td className="text-center text-white py-3">{team2Totals.assists}</td>
+                    <td className="text-center text-white py-3">{team2Totals.fgm}</td>
+                    <td className="text-center text-white py-3">{team2Totals.fga}</td>
+                    <td className="text-center text-white py-3">{formatPercentage(team2Totals.fgPercentage)}</td>
+                    <td className="text-center text-white py-3">{team2Totals.threePM}</td>
+                    <td className="text-center text-white py-3">{team2Totals.threePA}</td>
+                    <td className="text-center text-white py-3">{formatPercentage(team2Totals.threePPercentage)}</td>
+                    <td className="text-center text-white py-3">{team2Totals.ftm}</td>
+                    <td className="text-center text-white py-3">{team2Totals.fta}</td>
+                    <td className="text-center text-white py-3">{formatPercentage(team2Totals.ftPercentage)}</td>
+                    <td className="text-center text-white py-3">{team2Totals.steals}</td>
+                    <td className="text-center text-white py-3">{team2Totals.blocks}</td>
+                    <td className="text-center text-white py-3">{team2Totals.turnovers}</td>
+                    <td className="text-center text-white py-3">{team2Totals.minutes}</td>
+                    <td className="text-center text-white py-3">{team2Totals.playerScore.toFixed(1)}</td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </div>

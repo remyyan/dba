@@ -5,7 +5,7 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { getPlayer, getPlayerGameHistory, getPlayerSeasonStats, CURRENT_SEASON, ALL_SEASONS } from "@/lib/firebase-data";
+import { getPlayer, getAllGames, getPlayerSeasonStats, calculatePlayerScore, CURRENT_SEASON, ALL_SEASONS } from "@/lib/firebase-data";
 import Navigation from "@/components/Navigation";
 
 export default function PlayerDetailPage() {
@@ -21,16 +21,49 @@ export default function PlayerDetailPage() {
   useEffect(() => {
     const loadPlayerData = async () => {
       try {
-        const playerData = await getPlayer(playerId);
+        const [playerData, allGames] = await Promise.all([
+          getPlayer(playerId),
+          getAllGames()
+        ]);
         setPlayer(playerData);
         
-        // Load game history if available
-        try {
-          const games = await getPlayerGameHistory(playerId);
-          setGameHistory(games);
-        } catch (error) {
-          console.log('No game history available for player');
-          setGameHistory([]);
+        // Compute game history from all games
+        if (playerData) {
+          const playerGames: any[] = [];
+          
+          for (const game of allGames) {
+            // Check team1Players
+            const team1Perf = game.team1Players?.find(p => 
+              p.playerId === playerId || p.playerName?.toLowerCase() === playerData.name?.toLowerCase()
+            );
+            if (team1Perf) {
+              playerGames.push({
+                gameNumber: game.gameNumber,
+                date: game.date,
+                season: game.season,
+                ...team1Perf,
+                playerScore: calculatePlayerScore(team1Perf)
+              });
+            }
+            
+            // Check team2Players
+            const team2Perf = game.team2Players?.find(p => 
+              p.playerId === playerId || p.playerName?.toLowerCase() === playerData.name?.toLowerCase()
+            );
+            if (team2Perf) {
+              playerGames.push({
+                gameNumber: game.gameNumber,
+                date: game.date,
+                season: game.season,
+                ...team2Perf,
+                playerScore: calculatePlayerScore(team2Perf)
+              });
+            }
+          }
+          
+          // Sort by game number
+          playerGames.sort((a, b) => a.gameNumber - b.gameNumber);
+          setGameHistory(playerGames);
         }
       } catch (error) {
         console.error('Error loading player:', error);
@@ -65,7 +98,11 @@ export default function PlayerDetailPage() {
   const displayStats = seasonStats || player || {};
 
   // Filter game history by selected season
-  const filteredGameHistory = gameHistory.filter(game => game.season === selectedSeason);
+  // Games without a season field are treated as "2024-2025" (old season)
+  const filteredGameHistory = gameHistory.filter(game => {
+    const gameSeason = game.season || "2024-2025";
+    return gameSeason === selectedSeason;
+  });
 
   if (loading) {
     return (
@@ -291,6 +328,7 @@ export default function PlayerDetailPage() {
                       <th className="text-center text-orange-400 font-semibold py-3">AST</th>
                       <th className="text-center text-orange-400 font-semibold py-3">STL</th>
                       <th className="text-center text-orange-400 font-semibold py-3">BLK</th>
+                      <th className="text-center text-orange-400 font-semibold py-3">TOV</th>
                       <th className="text-center text-orange-400 font-semibold py-3">FGM</th>
                       <th className="text-center text-orange-400 font-semibold py-3">FGA</th>
                       <th className="text-center text-orange-400 font-semibold py-3">FG%</th>
@@ -319,6 +357,7 @@ export default function PlayerDetailPage() {
                         <td className="text-center text-gray-300 py-3">{game.assists}</td>
                         <td className="text-center text-gray-300 py-3">{game.steals}</td>
                         <td className="text-center text-gray-300 py-3">{game.blocks}</td>
+                        <td className="text-center text-gray-300 py-3">{game.turnovers || 0}</td>
                         <td className="text-center text-gray-300 py-3">{game.fgm}</td>
                         <td className="text-center text-gray-300 py-3">{game.fga}</td>
                         <td className="text-center text-gray-300 py-3">{(game.fgPercentage * 100).toFixed(1)}%</td>
