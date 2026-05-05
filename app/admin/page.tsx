@@ -503,6 +503,11 @@ export default function AdminPage() {
     return Math.round(distancePx * feetPerPixel * 10) / 10;
   };
 
+  const getPlayerName = (playerId: string) => {
+    const player = players.find((p: any) => p.id === playerId);
+    return player ? player.name : playerId;
+  };
+
   const handleAddFreeThrow = (made: boolean) => {
     const newShot = {
       x: 50, y: 57, // fixed FT line position (~15ft, center)
@@ -1179,9 +1184,9 @@ export default function AdminPage() {
               <h2 className="text-2xl font-bold text-white mb-6">Shot Map & Highlights Entry</h2>
               <p className="text-gray-400 mb-6">Watch the game footage and click on the court to place shots. Add highlights as you review.</p>
               
-              <div className="grid md:grid-cols-3 gap-8">
+              <div className="space-y-8">
                 {/* Court and Shot Entry */}
-                <div className="md:col-span-2 space-y-6">
+                <div className="space-y-6">
                   <div>
                     <label className="block text-white font-medium mb-2">Game Number</label>
                     <input
@@ -1195,16 +1200,17 @@ export default function AdminPage() {
                   </div>
 
                   {/* Shot Type Selector */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-3 gap-4">
                     <div>
                       <label className="block text-white font-medium mb-2">Shot Type</label>
                       <select
-                        value={nextShotType === 'FT' ? '2P' : nextShotType}
-                        onChange={(e) => setNextShotType(e.target.value as '2P' | '3P')}
+                        value={nextShotType}
+                        onChange={(e) => setNextShotType(e.target.value as '2P' | '3P' | 'FT')}
                         className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-orange-400"
                       >
                         <option value="2P">2-Pointer</option>
                         <option value="3P">3-Pointer</option>
+                        <option value="FT">Free Throw</option>
                       </select>
                     </div>
                     <div>
@@ -1218,28 +1224,90 @@ export default function AdminPage() {
                         <option value="missed">Missed ✗</option>
                       </select>
                     </div>
+                    <div>
+                      <label className="block text-white font-medium mb-2">Quarter</label>
+                      <select
+                        value={nextShotQuarter}
+                        onChange={(e) => setNextShotQuarter(e.target.value)}
+                        className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-orange-400"
+                      >
+                        <option value="Q1">Q1</option>
+                        <option value="Q2">Q2</option>
+                        <option value="Q3">Q3</option>
+                        <option value="Q4">Q4</option>
+                        <option value="OT">OT</option>
+                      </select>
+                    </div>
                   </div>
 
-                  {/* Free throw quick buttons */}
-                  <div>
-                    <label className="block text-white font-medium mb-2">Free Throws</label>
-                    <div className="flex gap-2">
+                  {/* Player and Time */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-white font-medium mb-2">Player</label>
+                      <input
+                        type="text"
+                        value={nextShotPlayerSearch}
+                        onChange={(e) => {
+                          setNextShotPlayerSearch(e.target.value);
+                          const player = players.find((p: any) => 
+                            p.name.toLowerCase().includes(e.target.value.toLowerCase())
+                          );
+                          if (player) setNextShotPlayerId(player.id);
+                        }}
+                        className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-orange-400"
+                        placeholder="Search player name..."
+                      />
+                      {nextShotPlayerSearch && (
+                        <div className="mt-1 max-h-32 overflow-y-auto bg-black/50 rounded border border-white/20">
+                          {players
+                            .filter((p: any) => p.name.toLowerCase().includes(nextShotPlayerSearch.toLowerCase()))
+                            .slice(0, 5)
+                            .map((player: any) => (
+                              <div
+                                key={player.id}
+                                onClick={() => {
+                                  setNextShotPlayerId(player.id);
+                                  setNextShotPlayerSearch(player.name);
+                                }}
+                                className="px-3 py-2 hover:bg-white/10 cursor-pointer text-sm"
+                              >
+                                {player.name} ({player.team})
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-white font-medium mb-2">Time (optional)</label>
+                      <input
+                        type="text"
+                        value={nextShotTime}
+                        onChange={(e) => setNextShotTime(e.target.value)}
+                        className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-orange-400"
+                        placeholder="e.g., 5:23"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Free Throw Buttons */}
+                  {nextShotType === 'FT' && (
+                    <div className="flex gap-4">
                       <button
-                        type="button"
                         onClick={() => handleAddFreeThrow(true)}
-                        className="flex-1 px-4 py-2 bg-green-500/20 hover:bg-green-500/30 border border-green-500/40 text-green-300 rounded-lg font-semibold text-sm transition-colors"
+                        disabled={!nextShotPlayerId}
+                        className="flex-1 bg-green-500 hover:bg-green-600 disabled:bg-green-500/50 text-white px-4 py-3 rounded-lg font-semibold transition-colors"
                       >
                         Made FT ✓
                       </button>
                       <button
-                        type="button"
                         onClick={() => handleAddFreeThrow(false)}
-                        className="flex-1 px-4 py-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-300 rounded-lg font-semibold text-sm transition-colors"
+                        disabled={!nextShotPlayerId}
+                        className="flex-1 bg-red-500 hover:bg-red-600 disabled:bg-red-500/50 text-white px-4 py-3 rounded-lg font-semibold transition-colors"
                       >
                         Missed FT ✗
                       </button>
                     </div>
-                  </div>
+                  )}
 
                   {/* Shot metadata */}
                   <div className="space-y-3">
@@ -1296,8 +1364,8 @@ export default function AdminPage() {
                   <div className="bg-orange-600 rounded-xl p-4 cursor-crosshair">
                     <svg
                       viewBox="0 0 500 470"
-                      onClick={handleCourtClick}
-                      className="w-full bg-orange-500 rounded-lg border-2 border-white"
+                      onClick={nextShotType !== 'FT' ? handleCourtClick : undefined}
+                      className={`w-full bg-orange-500 rounded-lg border-2 border-white ${nextShotType === 'FT' ? 'cursor-not-allowed opacity-75' : ''}`}
                     >
                       {/* Outer boundary */}
                       <rect x="10" y="10" width="480" height="450" fill="none" stroke="white" strokeWidth="2" />
@@ -1330,7 +1398,12 @@ export default function AdminPage() {
                         />
                       ))}
                     </svg>
-                    <p className="text-white text-sm mt-2">← Click on court to place shots (uses timestamp/player above)</p>
+                    <p className="text-white text-sm mt-2">
+                      {nextShotType === 'FT' 
+                        ? 'Free throws are automatically placed at the FT line - use buttons below' 
+                        : '← Click on court to place shots'
+                      }
+                    </p>
                   </div>
 
                   {/* Shots List */}
@@ -1340,7 +1413,7 @@ export default function AdminPage() {
                       {shots.length > 0 ? (
                         shots.map((shot, idx) => (
                           <div key={idx} className="text-sm text-gray-300">
-                            {shot.timestamp || `Shot ${idx + 1}`}: {shot.playerId || 'Unknown'} - {shot.made ? '✓ Made' : '✗ Missed'} {shot.type} from {shot.distanceFt} ft
+                            {shot.timestamp} - {getPlayerName(shot.playerId)}: {shot.type} ({shot.distanceFt}ft) - {shot.made ? '✓ Made' : '✗ Missed'}
                             <button
                               onClick={() => setShots(shots.filter((_, i) => i !== idx))}
                               className="ml-2 text-red-400 hover:text-red-300"
@@ -1377,10 +1450,9 @@ export default function AdminPage() {
                   </div>
                 </div>
 
-                {/* Highlights Sidebar */}
-                <div className="space-y-6">
-                  <div className="space-y-3 bg-white/5 rounded-lg p-4">
-                    <h3 className="text-lg font-bold text-white">Live Stream</h3>
+                {/* Highlights Card */}
+                <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20">
+                  <h3 className="text-xl font-bold text-white mb-4">Game Highlights ({highlights.length})</h3>
                     <p className="text-xs text-gray-300">
                       Saving link for <span className="text-orange-300 font-semibold">{selectedSeason}</span> • Game {gameNumber || '—'}
                     </p>
@@ -1502,44 +1574,48 @@ export default function AdminPage() {
                   </div>
 
                   {/* Highlights List */}
-                  <div className="bg-white/5 rounded-lg p-3 max-h-48 overflow-y-auto space-y-2">
-                    {highlights.length > 0 ? (
-                      highlights.map((h, idx) => (
-                        <div key={idx} className="text-xs text-gray-300 border-b border-white/10 pb-2">
-                          <p className="font-semibold">{h.timestamp} - {h.type}</p>
-                          <p className="text-gray-400">{h.description}</p>
-                          <button
-                            onClick={() => setHighlights(highlights.filter((_, i) => i !== idx))}
-                            className="text-red-400 hover:text-red-300 text-xs mt-1"
-                          >
-                            remove
-                          </button>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-gray-500 text-xs">No highlights yet. Add them as you review.</p>
-                    )}
+                  <div className="space-y-2">
+                    <h4 className="text-white font-semibold text-sm">Highlights Added</h4>
+                    <div className="bg-white/5 rounded-lg p-3 max-h-64 overflow-y-auto space-y-2">
+                      {highlights.length > 0 ? (
+                        highlights.map((h, idx) => (
+                          <div key={idx} className="text-xs text-gray-300 border-b border-white/10 pb-2 last:border-b-0">
+                            <p className="font-semibold text-white">
+                              {h.timestamp} - {getPlayerName(h.playerId)} ({h.type})
+                            </p>
+                            <p className="text-gray-400 mt-1">{h.description}</p>
+                            <button
+                              onClick={() => setHighlights(highlights.filter((_, i) => i !== idx))}
+                              className="text-red-400 hover:text-red-300 text-xs mt-1"
+                            >
+                              remove
+                            </button>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-gray-500 text-xs">No highlights yet. Add them as you review.</p>
+                      )}
+                    </div>
                   </div>
+                </div>
 
                   {/* Export Buttons */}
-                  <div className="space-y-2">
+                  <div className="mt-6 pt-4 border-t border-white/20 flex gap-4">
                     <button
                       onClick={handleExportData}
                       disabled={shots.length === 0 && highlights.length === 0}
-                      className="w-full bg-green-500 hover:bg-green-600 disabled:bg-green-500/50 text-white px-4 py-2 rounded font-semibold transition-colors text-sm"
+                      className="flex-1 bg-green-500 hover:bg-green-600 disabled:bg-green-500/50 text-white px-4 py-2 rounded font-semibold transition-colors text-sm"
                     >
                       📥 Export CSVs
                     </button>
                     <button
                       onClick={handleClearShots}
-                      className="w-full bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded font-semibold transition-colors text-sm"
+                      className="bg-red-500 hover:bg-red-600 text-white px-4 py-3 rounded font-semibold transition-colors text-sm"
                     >
                       🗑️ Clear All
                     </button>
                   </div>
                 </div>
-              </div>
-            </div>
           )}
         </div>
         <div className="mt-8 grid md:grid-cols-2 gap-8">
