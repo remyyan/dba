@@ -94,8 +94,20 @@ export default function PlayerDetailPage() {
     loadSeasonStats();
   }, [playerId, selectedSeason]);
 
+  const getPlayerBadges = (stats: any) => {
+    const badges: string[] = [];
+    if (stats.points >= 18 && stats.fgPercentage >= 0.48) badges.push('Scoring Star');
+    if (stats.threePPercentage >= 0.35 && stats.threePM >= 1.5) badges.push('Sniper');
+    if (stats.steals >= 1.5 || stats.blocks >= 1.2) badges.push('Lockdown');
+    if (stats.assists >= 5) badges.push('Playmaker');
+    if (stats.playerScore >= 18) badges.push('High Impact');
+    if (stats.efficiency >= 20) badges.push('Efficient');
+    return badges.slice(0, 3);
+  };
+
   // Use season stats if available, otherwise fall back to player stored stats
   const displayStats = seasonStats || player || {};
+  const displayBadges = getPlayerBadges(displayStats);
 
   // Filter game history by selected season
   // Games without a season field are treated as "2024-2025" (old season)
@@ -106,7 +118,7 @@ export default function PlayerDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center">
+      <div className="min-h-screen bg-black flex items-center justify-center text-white">
         <div className="text-white text-xl">Loading player...</div>
       </div>
     );
@@ -114,7 +126,7 @@ export default function PlayerDetailPage() {
 
   if (!player) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center">
+      <div className="min-h-screen bg-black flex items-center justify-center text-white">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-white mb-4">Player Not Found</h1>
           <Link href="/players" className="text-orange-400 hover:text-orange-300">
@@ -135,7 +147,7 @@ export default function PlayerDetailPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
+    <div className="min-h-screen bg-black text-white">
       <Navigation />
 
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -192,7 +204,7 @@ export default function PlayerDetailPage() {
         </div>
 
         {/* Season Selector */}
-        <div className="bg-gradient-to-r from-orange-500/20 to-yellow-500/20 backdrop-blur-sm rounded-xl p-4 border border-orange-500/30 mb-6">
+        <div className="bg-white/5 rounded-xl p-4 border border-white/10 mb-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <span className="text-2xl">📅</span>

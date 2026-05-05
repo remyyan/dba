@@ -1,19 +1,40 @@
 "use client";
 
-import { notFound } from "next/navigation";
+import { notFound, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { getGame, calculatePlayerScore } from "@/lib/firebase-data";
+import { getGame, calculatePlayerScore, CURRENT_SEASON } from "@/lib/firebase-data";
 import Navigation from "@/components/Navigation";
+
+const BADGE_DESCRIPTIONS: Record<string, string> = {
+  "Scoring Star": "18+ pts on 48%+ FG",
+  "Sniper": "35%+ from 3 on 1.5+ attempts",
+  "Lockdown": "1.5+ steals or 1.2+ blocks",
+  "Playmaker": "5+ assists",
+  "High Impact": "18+ player score",
+  "Efficient": "20+ efficiency rating",
+};
 
 interface GamePageProps {
   params: Promise<{ gameNumber: string }>;
 }
 
 export default function GamePage({ params }: GamePageProps) {
+  const searchParams = useSearchParams();
+  const seasonParam = searchParams.get('season') || CURRENT_SEASON;
   const [game, setGame] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
+  const getPlayerBadges = (stats: any) => {
+    const badges: string[] = [];
+    if (stats.points >= 18 && stats.fgPercentage >= 0.48) badges.push('Scoring Star');
+    if (stats.threePPercentage >= 0.35 && stats.threePM >= 1.5) badges.push('Sniper');
+    if (stats.steals >= 1.5 || stats.blocks >= 1.2) badges.push('Lockdown');
+    if (stats.assists >= 5) badges.push('Playmaker');
+    if (stats.playerScore >= 18) badges.push('High Impact');
+    if (stats.efficiency >= 20) badges.push('Efficient');
+    return badges.slice(0, 3);
+  };
 
   useEffect(() => {
     const loadGame = async () => {
@@ -21,7 +42,7 @@ export default function GamePage({ params }: GamePageProps) {
         const { gameNumber: gameNumStr } = await params;
         const gameNum = parseInt(gameNumStr);
 
-        const gameData = await getGame(gameNum);
+        const gameData = await getGame(gameNum, seasonParam);
         if (gameData) {
           // Calculate player scores for all players
           gameData.team1Players = gameData.team1Players.map((player: any) => ({
@@ -59,7 +80,7 @@ export default function GamePage({ params }: GamePageProps) {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
+      <div className="min-h-screen bg-black text-white">
         <Navigation />
         <div className="flex items-center justify-center min-h-[50vh]">
           <div className="text-white text-xl">Loading game...</div>
@@ -117,7 +138,7 @@ export default function GamePage({ params }: GamePageProps) {
   const team2Totals = game ? calculateTeamTotals(game.team2Players || []) : null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
+    <div className="min-h-screen bg-black text-white">
       <Navigation />
 
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -164,13 +185,13 @@ export default function GamePage({ params }: GamePageProps) {
 
         {/* Player of the Game */}
         {game.playerOfTheGame && (
-          <div className="bg-gradient-to-r from-orange-500/20 to-yellow-500/20 backdrop-blur-sm rounded-xl p-6 border border-orange-500/30 mb-8">
+          <div className="bg-white/5 rounded-xl p-6 border border-white/10 mb-8">
             <div className="text-center">
               <h3 className="text-2xl font-bold text-white mb-4 flex items-center justify-center">
                 <span className="text-3xl mr-3">🏆</span>
                 Player of the Game
               </h3>
-              <div className="flex items-center justify-center space-x-6">
+              <div className="flex flex-col md:flex-row items-center justify-center gap-6">
                 <div className={`w-16 h-16 rounded-full flex items-center justify-center text-white font-bold text-2xl ${
                   game.playerOfTheGame.team === 'Golden Dragons' ? 'bg-yellow-600' : 'bg-red-600'
                 }`}>
@@ -186,7 +207,14 @@ export default function GamePage({ params }: GamePageProps) {
                       game.playerOfTheGame.playerName
                     )}
                   </h4>
-                  <p className="text-lg text-gray-300">{game.playerOfTheGame.team}</p>
+                  <p className="text-lg text-gray-300 mb-2">{game.playerOfTheGame.team}</p>
+                  <div className="flex flex-wrap gap-2 mb-3 justify-center md:justify-start">
+                    {getPlayerBadges(game.playerOfTheGame).map((badge: string) => (
+                      <span key={badge} className="text-[10px] uppercase tracking-[0.2em] bg-white/10 text-gray-200 px-2 py-1 rounded-full">
+                        {badge}
+                      </span>
+                    ))}
+                  </div>
                   <p className="text-orange-400 font-semibold">Game Score: {game.playerOfTheGame.score.toFixed(1)}</p>
                 </div>
               </div>
@@ -284,16 +312,26 @@ export default function GamePage({ params }: GamePageProps) {
                 </tr>
               </thead>
               <tbody>
-                {game.team1Players.map((player: any) => (
-                  <tr key={player.playerName || player.name} className="border-b border-white/10">
+                {game.team1Players.map((player: any) => {
+                  const badges = getPlayerBadges(player);
+                  return (<tr key={player.playerName || player.name} className="border-b border-white/10">
                     <td className="text-white font-semibold py-2">
-                      {player.playerId ? (
-                        <Link href={`/players/${player.playerId}`} className="hover:text-orange-400 transition-colors">
-                          {player.playerName || player.name}
-                        </Link>
-                      ) : (
-                        player.playerName || player.name
-                      )}
+                      <div>
+                        {player.playerId ? (
+                          <Link href={`/games/${game.gameNumber}/player/${player.playerId}?season=${encodeURIComponent(seasonParam)}`} className="hover:text-orange-400 transition-colors">
+                            {player.playerName || player.name}
+                          </Link>
+                        ) : (
+                          player.playerName || player.name
+                        )}
+                        {badges.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {badges.map((badge: string) => (
+                              <span key={badge} title={BADGE_DESCRIPTIONS[badge]} className="text-[9px] uppercase tracking-[0.15em] bg-white/10 text-gray-300 px-1.5 py-0.5 rounded-full cursor-default">{badge}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td className="text-center text-gray-300 py-2">{formatStat(player.points)}</td>
                     <td className="text-center text-gray-300 py-2">{formatStat(player.rebounds)}</td>
@@ -312,8 +350,8 @@ export default function GamePage({ params }: GamePageProps) {
                     <td className="text-center text-gray-300 py-2">{formatStat(player.turnovers || 0)}</td>
                     <td className="text-center text-gray-300 py-2">{formatStat(player.minutes)}</td>
                     <td className="text-center text-gray-300 py-2">{player.playerScore?.toFixed(1) || '-'}</td>
-                  </tr>
-                ))}
+                  </tr>);
+                })}
               </tbody>
               {team1Totals && (
                 <tfoot>
@@ -376,16 +414,26 @@ export default function GamePage({ params }: GamePageProps) {
                 </tr>
               </thead>
               <tbody>
-                {game.team2Players.map((player: any) => (
-                  <tr key={player.playerName || player.name} className="border-b border-white/10">
+                {game.team2Players.map((player: any) => {
+                  const badges = getPlayerBadges(player);
+                  return (<tr key={player.playerName || player.name} className="border-b border-white/10">
                     <td className="text-white font-semibold py-2">
-                      {player.playerId ? (
-                        <Link href={`/players/${player.playerId}`} className="hover:text-orange-400 transition-colors">
-                          {player.playerName || player.name}
-                        </Link>
-                      ) : (
-                        player.playerName || player.name
-                      )}
+                      <div>
+                        {player.playerId ? (
+                          <Link href={`/games/${game.gameNumber}/player/${player.playerId}?season=${encodeURIComponent(seasonParam)}`} className="hover:text-orange-400 transition-colors">
+                            {player.playerName || player.name}
+                          </Link>
+                        ) : (
+                          player.playerName || player.name
+                        )}
+                        {badges.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {badges.map((badge: string) => (
+                              <span key={badge} title={BADGE_DESCRIPTIONS[badge]} className="text-[9px] uppercase tracking-[0.15em] bg-white/10 text-gray-300 px-1.5 py-0.5 rounded-full cursor-default">{badge}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td className="text-center text-gray-300 py-2">{formatStat(player.points)}</td>
                     <td className="text-center text-gray-300 py-2">{formatStat(player.rebounds)}</td>
@@ -404,8 +452,8 @@ export default function GamePage({ params }: GamePageProps) {
                     <td className="text-center text-gray-300 py-2">{formatStat(player.turnovers || 0)}</td>
                     <td className="text-center text-gray-300 py-2">{formatStat(player.minutes)}</td>
                     <td className="text-center text-gray-300 py-2">{player.playerScore?.toFixed(1) || '-'}</td>
-                  </tr>
-                ))}
+                  </tr>);
+                })}
               </tbody>
               {team2Totals && (
                 <tfoot>
@@ -438,7 +486,7 @@ export default function GamePage({ params }: GamePageProps) {
         {/* Navigation */}
         <div className="text-center">
           <Link
-            href="/games"
+            href={`/games?season=${encodeURIComponent(seasonParam)}`}
             className="bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-lg font-semibold transition-colors mr-4"
           >
             ← Back to Games

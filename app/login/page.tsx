@@ -69,11 +69,11 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
+    <div className="min-h-screen bg-black text-white">
       <Navigation />
 
       <div className="flex items-center justify-center min-h-[calc(100vh-100px)] px-4">
-        <div className="bg-white/10 backdrop-blur-sm rounded-xl p-8 border border-white/20 w-full max-w-md">
+        <div className="bg-white/10 rounded-xl p-8 border border-white/20 w-full max-w-md">
           <h1 className="text-3xl font-bold text-white mb-6 text-center">
             {isSignUp ? 'Join DBA' : 'Login to DBA'}
           </h1>

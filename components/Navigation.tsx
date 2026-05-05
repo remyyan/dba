@@ -25,7 +25,7 @@ export default function Navigation() {
   };
 
   return (
-    <header className="bg-black/20 backdrop-blur-sm border-b border-white/10 sticky top-0 z-50">
+    <header className="bg-black border-b border-white/10 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">

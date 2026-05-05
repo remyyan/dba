@@ -501,13 +501,34 @@ export async function getAllGames(): Promise<Game[]> {
   }
 }
 
-export async function getGame(gameNumber: number): Promise<Game | null> {
+export async function getGame(gameNumber: number, season?: string): Promise<Game | null> {
   try {
+    const constraints = [where('gameNumber', '==', gameNumber)];
+    if (season) {
+      constraints.push(where('season', '==', season));
+    }
+
     const q = query(
       collection(db, 'games'),
-      where('gameNumber', '==', gameNumber)
+      ...constraints
     );
     const querySnapshot = await getDocs(q);
+
+    if (querySnapshot.empty && season) {
+      // Fall back to any season match if the requested season has no exact game.
+      const fallbackQuery = query(
+        collection(db, 'games'),
+        where('gameNumber', '==', gameNumber)
+      );
+      const fallbackSnapshot = await getDocs(fallbackQuery);
+      if (fallbackSnapshot.empty) {
+        return null;
+      }
+      return {
+        id: fallbackSnapshot.docs[0].id,
+        ...fallbackSnapshot.docs[0].data()
+      } as Game;
+    }
 
     if (querySnapshot.empty) {
       return null;
@@ -1058,4 +1079,22 @@ export async function getPlayerSeasonStats(playerId: string, season: string): Pr
     console.error('Error getting player season stats:', error);
     return null;
   }
+}
+
+// ── Award Votes ────────────────────────────────────────────────────────────────
+
+export type AwardType = 'mvp' | 'dpoy' | 'mip' | 'cpoy' | 'smoty';
+
+/** Returns { [userId]: playerName } for one award in a season. */
+export async function getAwardVotes(season: string, award: AwardType): Promise<Record<string, string>> {
+  const ref = doc(db, 'awardVotes', `${season}_${award}`);
+  const snap = await getDoc(ref);
+  return snap.exists() ? (snap.data() as Record<string, string>) : {};
+}
+
+/** Cast or change a vote. One vote per user per award. */
+export async function castAwardVote(season: string, award: AwardType, userId: string, playerName: string): Promise<void> {
+  const { setDoc } = await import('firebase/firestore');
+  const ref = doc(db, 'awardVotes', `${season}_${award}`);
+  await setDoc(ref, { [userId]: playerName }, { merge: true });
 }

@@ -96,6 +96,17 @@ export default function PlayersPage() {
       }
     }
     
+    const getPlayerBadges = (stats: any) => {
+      const badges: string[] = [];
+      if (stats.points >= 18 && stats.fgPercentage >= 0.48) badges.push('Scoring Star');
+      if (stats.threePPercentage >= 0.35 && stats.threePM >= 1.5) badges.push('Sniper');
+      if (stats.steals >= 1.5 || stats.blocks >= 1.2) badges.push('Lockdown');
+      if (stats.assists >= 5) badges.push('Playmaker');
+      if (stats.playerScore >= 18) badges.push('High Impact');
+      if (stats.efficiency >= 20) badges.push('Efficient');
+      return badges.slice(0, 3);
+    };
+
     // Merge with player base info and compute averages
     const computed = players.map(player => {
       const key = player.id || player.name.toLowerCase();
@@ -116,12 +127,13 @@ export default function PlayersPage() {
           threePPercentage: 0,
           ftPercentage: 0,
           efficiency: 0,
-          playerScore: 0
+          playerScore: 0,
+          badges: []
         };
       }
       
       const gp = stats.gamesPlayed;
-      return {
+      const computed = {
         ...player,
         gamesPlayed: gp,
         points: stats.points / gp,
@@ -136,6 +148,10 @@ export default function PlayersPage() {
         ftPercentage: stats.fta > 0 ? stats.ftm / stats.fta : 0,
         efficiency: stats.efficiencySum / gp,
         playerScore: stats.playerScoreSum / gp
+      };
+      return {
+        ...computed,
+        badges: getPlayerBadges(computed)
       };
     });
     
@@ -184,21 +200,21 @@ export default function PlayersPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center">
+      <div className="min-h-screen bg-black flex items-center justify-center text-white">
         <div className="text-white text-xl">Loading players...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
+    <div className="min-h-screen bg-black text-white">
       <Navigation />
 
       <div className="max-w-7xl mx-auto px-4 py-8">
         <h1 className="text-4xl font-bold text-white mb-8 text-center">DBA Players</h1>
 
         {/* Season Selector */}
-        <div className="bg-gradient-to-r from-orange-500/20 to-yellow-500/20 backdrop-blur-sm rounded-xl p-4 border border-orange-500/30 mb-6">
+        <div className="bg-white/5 rounded-xl p-4 border border-white/10 mb-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <span className="text-2xl">📅</span>
@@ -286,8 +302,17 @@ export default function PlayersPage() {
           {filteredPlayers.map((player) => (
             <Link key={player.id} href={`/players/${player.id}`}>
               <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 border border-white/20 hover:bg-white/20 transition-all cursor-pointer">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xl font-bold text-white">{player.name}</h3>
+                <div className="flex items-start justify-between mb-3 gap-4">
+                  <div>
+                    <h3 className="text-xl font-bold text-white">{player.name}</h3>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {(player.badges || []).slice(0, 3).map((badge: string) => (
+                        <span key={badge} className="text-[10px] uppercase tracking-[0.2em] bg-white/10 text-gray-200 px-2 py-1 rounded-full">
+                          {badge}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                   <span className={`px-2 py-1 rounded text-xs font-semibold ${
                     player.team === 'Golden Dragons' ? 'bg-yellow-600 text-white' :
                     player.team === 'Los Sigmas' ? 'bg-red-600 text-white' :

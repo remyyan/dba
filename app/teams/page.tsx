@@ -108,7 +108,7 @@ export default function TeamsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
+      <div className="min-h-screen bg-black text-white">
         <Navigation />
         <div className="flex items-center justify-center min-h-[50vh]">
           <div className="text-white text-xl">Loading teams...</div>
@@ -118,14 +118,14 @@ export default function TeamsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
+    <div className="min-h-screen bg-black text-white">
       <Navigation />
 
       <div className="max-w-7xl mx-auto px-4 py-8">
         <h1 className="text-4xl font-bold text-white mb-8 text-center">DBA Teams</h1>
 
         {/* Season Selector */}
-        <div className="bg-gradient-to-r from-orange-500/20 to-yellow-500/20 backdrop-blur-sm rounded-xl p-4 border border-orange-500/30 mb-8">
+        <div className="bg-white/5 rounded-xl p-4 border border-white/10 mb-8">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <span className="text-2xl">📅</span>
