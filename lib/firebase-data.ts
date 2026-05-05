@@ -10,7 +10,8 @@ import {
   orderBy,
   Timestamp,
   writeBatch,
-  getDoc
+  getDoc,
+  setDoc
 } from 'firebase/firestore';
 import { db } from './firebase';
 
@@ -98,6 +99,7 @@ export interface Game {
   id?: string;
   gameNumber: number;
   season: string; // e.g., "2024-2025" or "2026-2027"
+  liveStreamUrl?: string;
   date: string;
   team1: string;
   team2: string;
@@ -566,6 +568,39 @@ export async function getGame(gameNumber: number, season?: string): Promise<Game
   } catch (error) {
     console.error('Error fetching game:', error);
     return null;
+  }
+}
+
+export async function updateGameLiveStreamUrl(
+  gameNumber: number,
+  season: string,
+  liveStreamUrl: string
+): Promise<void> {
+  try {
+    const q = query(
+      collection(db, 'games'),
+      where('gameNumber', '==', gameNumber),
+      where('season', '==', season)
+    );
+    const snapshot = await getDocs(q);
+
+    if (snapshot.empty) {
+      throw new Error(`Game ${gameNumber} (${season}) not found`);
+    }
+
+    const updates = {
+      liveStreamUrl: liveStreamUrl.trim(),
+      updatedAt: Timestamp.now()
+    };
+
+    const batch = writeBatch(db);
+    snapshot.docs.forEach((snap) => {
+      batch.update(snap.ref, updates);
+    });
+    await batch.commit();
+  } catch (error) {
+    console.error('Error updating game live stream URL:', error);
+    throw error;
   }
 }
 
@@ -1094,7 +1129,71 @@ export async function getAwardVotes(season: string, award: AwardType): Promise<R
 
 /** Cast or change a vote. One vote per user per award. */
 export async function castAwardVote(season: string, award: AwardType, userId: string, playerName: string): Promise<void> {
-  const { setDoc } = await import('firebase/firestore');
   const ref = doc(db, 'awardVotes', `${season}_${award}`);
   await setDoc(ref, { [userId]: playerName }, { merge: true });
+}
+
+// ── Game Shot Data ─────────────────────────────────────────────────────────────
+
+export interface ShotEntry {
+  x: number;
+  y: number;
+  made: boolean;
+  type: '2P' | '3P' | 'FT';
+  timestamp: string;
+  playerId: string;
+  distanceFt: number;
+}
+
+export interface HighlightEntry {
+  timestamp: string;
+  playerId: string;
+  type: string;
+  description: string;
+}
+
+export interface GameShotData {
+  gameNumber: number;
+  season: string;
+  youtubeUrl: string;
+  shots: ShotEntry[];
+  highlights: HighlightEntry[];
+  updatedAt: Timestamp;
+}
+
+export async function saveGameShotData(
+  gameNumber: number,
+  season: string,
+  youtubeUrl: string,
+  shots: ShotEntry[],
+  highlights: HighlightEntry[]
+): Promise<void> {
+  const ref = doc(db, 'gameShotData', `${season}_${gameNumber}`);
+  await setDoc(ref, {
+    gameNumber,
+    season,
+    youtubeUrl,
+    shots,
+    highlights,
+    updatedAt: Timestamp.now()
+  });
+}
+
+export async function loadGameShotData(gameNumber: number, season: string): Promise<GameShotData | null> {
+  const ref = doc(db, 'gameShotData', `${season}_${gameNumber}`);
+  const snap = await getDoc(ref);
+  return snap.exists() ? (snap.data() as GameShotData) : null;
+}
+
+export async function getPlayerHighlights(playerId: string, season?: string): Promise<Array<HighlightEntry & { gameNumber: number; season: string }>> {
+  const snap = await getDocs(collection(db, 'gameShotData'));
+  const results: Array<HighlightEntry & { gameNumber: number; season: string }> = [];
+  snap.forEach(d => {
+    const data = d.data() as GameShotData;
+    if (season && data.season !== season) return;
+    data.highlights
+      .filter(h => h.playerId === playerId)
+      .forEach(h => results.push({ ...h, gameNumber: data.gameNumber, season: data.season }));
+  });
+  return results.sort((a, b) => a.gameNumber - b.gameNumber);
 }

@@ -3,7 +3,7 @@
 import { notFound, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useState, useEffect, use, useRef } from "react";
-import { getGame, calculatePlayerScore, CURRENT_SEASON } from "@/lib/firebase-data";
+import { getGame, calculatePlayerScore, loadGameShotData, CURRENT_SEASON, ShotEntry, HighlightEntry } from "@/lib/firebase-data";
 import Navigation from "@/components/Navigation";
 
 interface PageProps {
@@ -29,6 +29,8 @@ export default function PlayerGamePage({ params }: PageProps) {
   const [loading, setLoading] = useState(true);
   const [sharing, setSharing] = useState(false);
   const [shareMsg, setShareMsg] = useState("");
+  const [shots, setShots] = useState<ShotEntry[]>([]);
+  const [highlights, setHighlights] = useState<HighlightEntry[]>([]);
   const cardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -48,6 +50,11 @@ export default function PlayerGamePage({ params }: PageProps) {
 
         setGame(gameData);
         setPlayer({ ...found, playerScore: calculatePlayerScore(found) });
+        const shotData = await loadGameShotData(parseInt(gameNumStr), seasonParam);
+        if (shotData) {
+          setShots(shotData.shots.filter(s => s.playerId === playerId));
+          setHighlights(shotData.highlights.filter(h => h.playerId === playerId));
+        }
       } catch {
         notFound();
       } finally {
@@ -83,6 +90,20 @@ export default function PlayerGamePage({ params }: PageProps) {
 
   const fmt = (n: number) => (n == null ? "0" : n.toString());
   const pct = (n: number) => (n == null || n === 0 ? "0%" : (n * 100).toFixed(0) + "%");
+
+  const describeShotLabel = (shot: ShotEntry): string => {
+    if (shot.type === 'FT') return 'free throw';
+    const ft = shot.distanceFt;
+    if (shot.type === '3P') {
+      if (ft >= 30) return `${ft}ft bomb`;
+      if (ft >= 27) return `${ft}ft deep three`;
+      return `${ft}ft three pointer`;
+    }
+    if (ft <= 3) return 'layup';
+    if (ft <= 6) return `${ft}ft floater`;
+    if (ft <= 10) return `${ft}ft short mid`;
+    return `${ft}ft midrange`;
+  };
 
   const badges = getPlayerBadges(player);
   const isTeam1 = game.team1Players?.some((p: any) => p.playerName === player.playerName);
@@ -306,6 +327,39 @@ export default function PlayerGamePage({ params }: PageProps) {
           </button>
           {shareMsg && <p className="text-gray-500 text-xs">{shareMsg}</p>}
         </div>
+
+        {/* Shot log */}
+        {(shots.length > 0 || highlights.length > 0) && (
+          <div className="mt-6 bg-[#161616] rounded-2xl border border-white/5 overflow-hidden">
+            <div className="px-5 py-4 border-b border-white/5">
+              <h3 className="text-white font-bold text-sm uppercase tracking-wider">Shot Log</h3>
+            </div>
+            <div className="divide-y divide-white/5">
+              {[
+                ...shots.map(s => ({ kind: 'shot' as const, timestamp: s.timestamp, made: s.made, label: describeShotLabel(s) })),
+                ...highlights.map(h => ({ kind: 'highlight' as const, timestamp: h.timestamp, type: h.type, description: h.description })),
+              ].map((entry, i) => (
+                <div key={i} className="flex items-center gap-3 px-5 py-3 text-sm">
+                  {entry.kind === 'shot' ? (
+                    <>
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${entry.made ? 'bg-green-400' : 'bg-red-400'}`} />
+                      <span className="text-gray-500 w-16 flex-shrink-0 text-xs">{entry.timestamp || '—'}</span>
+                      <span className={`w-12 flex-shrink-0 font-medium ${entry.made ? 'text-green-400' : 'text-red-400'}`}>{entry.made ? 'Made' : 'Miss'}</span>
+                      <span className="text-gray-200">{entry.label}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="w-2 h-2 rounded-full flex-shrink-0 bg-orange-400" />
+                      <span className="text-gray-500 w-16 flex-shrink-0 text-xs">{entry.timestamp || '—'}</span>
+                      <span className="text-orange-300 w-12 flex-shrink-0 font-medium capitalize">{entry.type!.replace(/-/g, ' ')}</span>
+                      <span className="text-gray-200">{entry.description}</span>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

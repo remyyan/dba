@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { getAllTeams, getAllPlayers, addNewPlayer, updatePlayer, transferPlayer, cleanupQuarterPlayers, cleanupDuplicateTeams, updateTeamRecords, recalculatePlayerAveragesFromGames, updateGamesWithSeason, CURRENT_SEASON, ALL_SEASONS } from '@/lib/firebase-data';
+import { getAllTeams, getAllPlayers, addNewPlayer, updatePlayer, transferPlayer, cleanupQuarterPlayers, cleanupDuplicateTeams, updateTeamRecords, recalculatePlayerAveragesFromGames, updateGamesWithSeason, updateGameLiveStreamUrl, CURRENT_SEASON, ALL_SEASONS, saveGameShotData, loadGameShotData, ShotEntry, HighlightEntry } from '@/lib/firebase-data';
 import { addActivity } from '@/lib/activities';
 import { importGameFromCSV } from '@/lib/csv-importer';
 import Navigation from '@/components/Navigation';
@@ -13,7 +13,33 @@ export default function AdminPage() {
   const router = useRouter();
   const [, setTeams] = useState<any[]>([]);
   const [players, setPlayers] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'add' | 'edit' | 'trade' | 'drop' | 'csv'>('csv');
+  const [activeTab, setActiveTab] = useState<'add' | 'edit' | 'trade' | 'drop' | 'csv' | 'shots'>('csv');
+
+  // Shot Entry states
+  const [gameNumber, setGameNumber] = useState('');
+  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [shots, setShots] = useState<Array<{
+    x: number;
+    y: number;
+    made: boolean;
+    type: '2P' | '3P' | 'FT';
+    timestamp: string;
+    playerId: string;
+    distanceFt: number;
+  }>>([]);
+  const [highlights, setHighlights] = useState<Array<{timestamp: string, playerId: string, type: string, description: string}>>([]);
+  const [nextShotType, setNextShotType] = useState<'2P' | '3P' | 'FT'>('2P');
+  const [nextShotMade, setNextShotMade] = useState(true);
+  const [nextShotQuarter, setNextShotQuarter] = useState('Q1');
+  const [nextShotTime, setNextShotTime] = useState('');
+  const [nextShotPlayerId, setNextShotPlayerId] = useState('');
+  const [nextShotPlayerSearch, setNextShotPlayerSearch] = useState('');
+  const [highlightQuarter, setHighlightQuarter] = useState('Q1');
+  const [highlightTime, setHighlightTime] = useState('');
+  const [highlightPlayerId, setHighlightPlayerId] = useState('');
+  const [highlightPlayerSearch, setHighlightPlayerSearch] = useState('');
+  const [highlightType, setHighlightType] = useState('made-shot');
+  const [highlightDescription, setHighlightDescription] = useState('');
 
   // Form states
   const [newPlayerName, setNewPlayerName] = useState('');
@@ -82,6 +108,34 @@ export default function AdminPage() {
       router.push('/login');
     }
   }, [user, isAdmin, loading, router]);
+
+  // Auto-save to Firestore whenever shots/highlights change (debounced)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!gameNumber || (shots.length === 0 && highlights.length === 0)) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveGameShotData(parseInt(gameNumber), selectedSeason, youtubeUrl, shots as ShotEntry[], highlights as HighlightEntry[])
+        .catch(err => console.error('Auto-save failed:', err));
+    }, 800);
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+  }, [shots, highlights, gameNumber, selectedSeason, youtubeUrl]);
+
+  // Auto-load when a valid game number is typed
+  const loadedGameRef = useRef('');
+  useEffect(() => {
+    const num = parseInt(gameNumber);
+    if (!gameNumber || isNaN(num) || loadedGameRef.current === `${selectedSeason}_${gameNumber}`) return;
+    loadedGameRef.current = `${selectedSeason}_${gameNumber}`;
+    loadGameShotData(num, selectedSeason).then(data => {
+      if (data) {
+        setShots(data.shots);
+        setHighlights(data.highlights);
+        if (data.youtubeUrl) setYoutubeUrl(data.youtubeUrl);
+        setMessage(`📂 Loaded ${data.shots.length} shots and ${data.highlights.length} highlights for Game ${gameNumber}`);
+      }
+    }).catch(err => console.error('Auto-load failed:', err));
+  }, [gameNumber, selectedSeason]);
 
   if (loading) {
     return (
@@ -438,6 +492,164 @@ export default function AdminPage() {
     }
   };
 
+  const calculateShotDistanceFeet = (xPct: number, yPct: number) => {
+    // Court SVG uses 500x470 with playable area ~450px tall (10..460) ~= 47ft half court.
+    const shotX = (xPct / 100) * 500;
+    const shotY = (yPct / 100) * 470;
+    const hoopX = 250;
+    const hoopY = 35;
+    const feetPerPixel = 47 / 450;
+    const distancePx = Math.sqrt((shotX - hoopX) ** 2 + (shotY - hoopY) ** 2);
+    return Math.round(distancePx * feetPerPixel * 10) / 10;
+  };
+
+  const handleAddFreeThrow = (made: boolean) => {
+    const newShot = {
+      x: 50, y: 57, // fixed FT line position (~15ft, center)
+      made,
+      type: 'FT' as const,
+      timestamp: nextShotTime.trim() ? `${nextShotQuarter} ${nextShotTime.trim()}` : nextShotQuarter,
+      playerId: nextShotPlayerId.trim(),
+      distanceFt: 15
+    };
+    setShots(prev => [...prev, newShot]);
+  };
+
+  const handleCourtClick = (e: React.MouseEvent<SVGSVGElement>) => {
+    const svg = e.currentTarget;
+    const rect = svg.getBoundingClientRect();
+    const x = Math.round(((e.clientX - rect.left) / rect.width) * 100);
+    const y = Math.round(((e.clientY - rect.top) / rect.height) * 100);
+
+    const distanceFt = calculateShotDistanceFeet(x, y);
+    const newShot = {
+      x,
+      y,
+      made: nextShotMade,
+      type: nextShotType,
+      timestamp: nextShotTime.trim() ? `${nextShotQuarter} ${nextShotTime.trim()}` : nextShotQuarter,
+      playerId: nextShotPlayerId.trim(),
+      distanceFt
+    };
+    setShots([...shots, newShot]);
+  };
+
+  const handleAddHighlight = () => {
+    if (!highlightPlayerId || !highlightDescription) {
+      setMessage('Please fill in all highlight fields');
+      return;
+    }
+
+    const newHighlight = {
+      timestamp: highlightTime.trim() ? `${highlightQuarter} ${highlightTime.trim()}` : highlightQuarter,
+      playerId: highlightPlayerId,
+      type: highlightType,
+      description: highlightDescription
+    };
+
+    setHighlights([...highlights, newHighlight]);
+    setHighlightTime('');
+    setHighlightPlayerId('');
+    setHighlightPlayerSearch('');
+    setHighlightDescription('');
+  };
+
+  const handleExportData = () => {
+    if (!gameNumber) {
+      setMessage('Please enter a game number');
+      return;
+    }
+
+    // Export shots CSV
+    const shotsCSV = ['gameNumber,season,timestamp,playerId,shotX,shotY,made,type,distanceFt'];
+    shots.forEach((shot, idx) => {
+      shotsCSV.push(
+        `${gameNumber},${selectedSeason},"${shot.timestamp || ''}","${shot.playerId || `Player${idx + 1}`}",${shot.x},${shot.y},${shot.made ? 'Yes' : 'No'},${shot.type},${shot.distanceFt}`
+      );
+    });
+
+    // Export highlights CSV
+    const highlightsCSV = ['gameNumber,timestamp,playerId,type,description'];
+    highlights.forEach((highlight) => {
+      highlightsCSV.push(`${gameNumber},"${highlight.timestamp}","${highlight.playerId}","${highlight.type}","${highlight.description}"`);
+    });
+
+    // Download shots
+    const shotsLink = document.createElement('a');
+    shotsLink.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(shotsCSV.join('\n'));
+    shotsLink.download = `Game${gameNumber}_${selectedSeason}_shots.csv`;
+    shotsLink.click();
+
+    // Download highlights
+    const highlightsLink = document.createElement('a');
+    highlightsLink.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(highlightsCSV.join('\n'));
+    highlightsLink.download = `Game${gameNumber}_${selectedSeason}_highlights.csv`;
+    highlightsLink.click();
+
+    setMessage(`✅ Exported ${shots.length} shots and ${highlights.length} highlights for Game ${gameNumber}`);
+  };
+
+  const handleClearShots = () => {
+    if (confirm('Clear all shot data? This cannot be undone.')) {
+      setShots([]);
+      setHighlights([]);
+      setGameNumber('');
+      loadedGameRef.current = '';
+    }
+  };
+
+  const getEmbedUrl = (url: string) => {
+    const trimmed = url.trim();
+    if (!trimmed) return '';
+
+    try {
+      const parsed = new URL(trimmed);
+
+      // YouTube watch/share URLs -> embed URL
+      if (parsed.hostname.includes('youtube.com')) {
+        const videoId = parsed.searchParams.get('v');
+        if (videoId) return `https://www.youtube.com/embed/${videoId}`;
+      }
+      if (parsed.hostname.includes('youtu.be')) {
+        const videoId = parsed.pathname.replace('/', '');
+        if (videoId) return `https://www.youtube.com/embed/${videoId}`;
+      }
+
+      // Twitch channel URL -> embed URL
+      if (parsed.hostname.includes('twitch.tv')) {
+        const channel = parsed.pathname.split('/').filter(Boolean)[0];
+        if (channel) {
+          return `https://player.twitch.tv/?channel=${channel}&parent=localhost`;
+        }
+      }
+
+      // Already embeddable URL
+      return trimmed;
+    } catch {
+      return '';
+    }
+  };
+
+  const handleSaveLiveStream = async () => {
+    const gameNum = parseInt(gameNumber);
+    if (!gameNum || !youtubeUrl.trim()) {
+      setMessage('Enter game number and a valid stream URL first.');
+      return;
+    }
+
+    setSubmitting(true);
+    setMessage('');
+    try {
+      await updateGameLiveStreamUrl(gameNum, selectedSeason, youtubeUrl);
+      setMessage(`Saved live stream URL for Game ${gameNum} (${selectedSeason}).`);
+    } catch (error) {
+      setMessage('Error saving live stream URL.');
+      console.error('Error:', error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-black text-white">
       <Navigation />
@@ -467,6 +679,7 @@ export default function AdminPage() {
         {/* Tab Navigation */}
         <div className="flex flex-wrap gap-4 mb-8 justify-center">
           {[
+            { key: 'shots', label: 'Shot Maps & Highlights', icon: '🎯' },
             { key: 'csv', label: 'Import CSV Game', icon: '📊' },
             { key: 'add', label: 'Add Player', icon: '➕' },
             { key: 'edit', label: 'Edit Player', icon: '✏️' },
@@ -960,9 +1173,375 @@ export default function AdminPage() {
               </form>
             </div>
           )}
-        </div>
 
-        {/* Current Rosters */}
+          {activeTab === 'shots' && (
+            <div>
+              <h2 className="text-2xl font-bold text-white mb-6">Shot Map & Highlights Entry</h2>
+              <p className="text-gray-400 mb-6">Watch the game footage and click on the court to place shots. Add highlights as you review.</p>
+              
+              <div className="grid md:grid-cols-3 gap-8">
+                {/* Court and Shot Entry */}
+                <div className="md:col-span-2 space-y-6">
+                  <div>
+                    <label className="block text-white font-medium mb-2">Game Number</label>
+                    <input
+                      type="number"
+                      value={gameNumber}
+                      onChange={(e) => setGameNumber(e.target.value)}
+                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-orange-400"
+                      placeholder="e.g., 1"
+                      min="1"
+                    />
+                  </div>
+
+                  {/* Shot Type Selector */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-white font-medium mb-2">Shot Type</label>
+                      <select
+                        value={nextShotType === 'FT' ? '2P' : nextShotType}
+                        onChange={(e) => setNextShotType(e.target.value as '2P' | '3P')}
+                        className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-orange-400"
+                      >
+                        <option value="2P">2-Pointer</option>
+                        <option value="3P">3-Pointer</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-white font-medium mb-2">Result</label>
+                      <select
+                        value={nextShotMade ? 'made' : 'missed'}
+                        onChange={(e) => setNextShotMade(e.target.value === 'made')}
+                        className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-orange-400"
+                      >
+                        <option value="made">Made ✓</option>
+                        <option value="missed">Missed ✗</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Free throw quick buttons */}
+                  <div>
+                    <label className="block text-white font-medium mb-2">Free Throws</label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleAddFreeThrow(true)}
+                        className="flex-1 px-4 py-2 bg-green-500/20 hover:bg-green-500/30 border border-green-500/40 text-green-300 rounded-lg font-semibold text-sm transition-colors"
+                      >
+                        Made FT ✓
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleAddFreeThrow(false)}
+                        className="flex-1 px-4 py-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-300 rounded-lg font-semibold text-sm transition-colors"
+                      >
+                        Missed FT ✗
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Shot metadata */}
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-white font-medium mb-2">Shot Timestamp</label>
+                      <div className="flex gap-2">
+                        <select
+                          value={nextShotQuarter}
+                          onChange={(e) => setNextShotQuarter(e.target.value)}
+                          className="px-3 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:border-orange-400"
+                        >
+                          <option value="Q1">Q1</option>
+                          <option value="Q2">Q2</option>
+                          <option value="Q3">Q3</option>
+                          <option value="Q4">Q4</option>
+                          <option value="OT">OT</option>
+                        </select>
+                        <input
+                          type="text"
+                          value={nextShotTime}
+                          onChange={(e) => setNextShotTime(e.target.value)}
+                          className="flex-1 px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-orange-400"
+                          placeholder="2:10"
+                        />
+                      </div>
+                    </div>
+                    <div className="relative">
+                      <label className="block text-white font-medium mb-2">Player</label>
+                      <input
+                        type="text"
+                        value={nextShotPlayerSearch}
+                        onChange={(e) => { setNextShotPlayerSearch(e.target.value); setNextShotPlayerId(''); }}
+                        className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-orange-400"
+                        placeholder="Search player..."
+                      />
+                      {nextShotPlayerSearch && !nextShotPlayerId && (
+                        <div className="absolute z-10 w-full mt-1 bg-gray-800 border border-white/20 rounded-lg max-h-40 overflow-y-auto">
+                          {players.filter(p => p.name?.toLowerCase().includes(nextShotPlayerSearch.toLowerCase()) || p.id?.toLowerCase().includes(nextShotPlayerSearch.toLowerCase())).map(p => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => { setNextShotPlayerId(p.id); setNextShotPlayerSearch(p.name || p.id); }}
+                              className="w-full text-left px-4 py-2 text-white hover:bg-white/10 text-sm"
+                            >
+                              {p.name || p.id} <span className="text-gray-400 text-xs">({p.team})</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Court SVG */}
+                  <div className="bg-orange-600 rounded-xl p-4 cursor-crosshair">
+                    <svg
+                      viewBox="0 0 500 470"
+                      onClick={handleCourtClick}
+                      className="w-full bg-orange-500 rounded-lg border-2 border-white"
+                    >
+                      {/* Outer boundary */}
+                      <rect x="10" y="10" width="480" height="450" fill="none" stroke="white" strokeWidth="2" />
+
+                      {/* Hoop + backboard */}
+                      <line x1="220" y1="22" x2="280" y2="22" stroke="white" strokeWidth="2" />
+                      <circle cx="250" cy="35" r="9" fill="none" stroke="white" strokeWidth="2" />
+
+                      {/* Paint / key */}
+                      <rect x="170" y="10" width="160" height="190" fill="none" stroke="white" strokeWidth="2" />
+
+                      {/* Free throw circle (top solid, bottom dashed) */}
+                      <path d="M 215 200 A 35 35 0 0 1 285 200" fill="none" stroke="white" strokeWidth="2" />
+                      <path d="M 285 200 A 35 35 0 0 1 215 200" fill="none" stroke="white" strokeWidth="2" strokeDasharray="6 6" opacity="0.8" />
+
+                      {/* Three-point line */}
+                      <line x1="45" y1="10" x2="45" y2="140" stroke="white" strokeWidth="2" />
+                      <line x1="455" y1="10" x2="455" y2="140" stroke="white" strokeWidth="2" />
+                      <path d="M 45 140 A 205 205 0 0 0 455 140" fill="none" stroke="white" strokeWidth="2" />
+                      
+                      {/* Render shots */}
+                      {shots.map((shot, idx) => (
+                        <circle
+                          key={idx}
+                          cx={(shot.x / 100) * 500}
+                          cy={(shot.y / 100) * 470}
+                          r="8"
+                          fill={shot.made ? '#10b981' : '#ef4444'}
+                          opacity="0.7"
+                        />
+                      ))}
+                    </svg>
+                    <p className="text-white text-sm mt-2">← Click on court to place shots (uses timestamp/player above)</p>
+                  </div>
+
+                  {/* Shots List */}
+                  <div>
+                    <h3 className="text-white font-semibold mb-2">Shots Placed: {shots.length}</h3>
+                    <div className="bg-white/5 rounded-lg p-3 max-h-32 overflow-y-auto space-y-1">
+                      {shots.length > 0 ? (
+                        shots.map((shot, idx) => (
+                          <div key={idx} className="text-sm text-gray-300">
+                            {shot.timestamp || `Shot ${idx + 1}`}: {shot.playerId || 'Unknown'} - {shot.made ? '✓ Made' : '✗ Missed'} {shot.type} from {shot.distanceFt} ft
+                            <button
+                              onClick={() => setShots(shots.filter((_, i) => i !== idx))}
+                              className="ml-2 text-red-400 hover:text-red-300"
+                            >
+                              remove
+                            </button>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-gray-500 text-sm">No shots yet. Click on the court to add shots.</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Play Log */}
+                  <div>
+                    <h3 className="text-white font-semibold mb-2">Play Log</h3>
+                    <div className="bg-white/5 rounded-lg p-3 max-h-56 overflow-y-auto space-y-2">
+                      {shots.length > 0 ? (
+                        [...shots].map((shot, idx) => (
+                          <div key={idx} className="text-sm text-gray-200 border-b border-white/10 pb-2">
+                            <div className="font-semibold">
+                              {shot.timestamp || `Play ${idx + 1}`} • {shot.playerId || 'Unknown'}
+                            </div>
+                            <div className="text-gray-300">
+                              {shot.made ? 'Made' : 'Missed'} {shot.type} from {shot.distanceFt} ft
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-gray-500 text-sm">No plays yet. Add shots to build the log.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Highlights Sidebar */}
+                <div className="space-y-6">
+                  <div className="space-y-3 bg-white/5 rounded-lg p-4">
+                    <h3 className="text-lg font-bold text-white">Live Stream</h3>
+                    <p className="text-xs text-gray-300">
+                      Saving link for <span className="text-orange-300 font-semibold">{selectedSeason}</span> • Game {gameNumber || '—'}
+                    </p>
+                    <input
+                      type="url"
+                      value={youtubeUrl}
+                      onChange={(e) => setYoutubeUrl(e.target.value)}
+                      className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded text-white placeholder-gray-400 focus:outline-none focus:border-orange-400 text-sm"
+                      placeholder="Paste YouTube/Twitch stream URL"
+                    />
+                    <button
+                      onClick={handleSaveLiveStream}
+                      disabled={submitting || !gameNumber || !youtubeUrl.trim()}
+                      className="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-blue-500/50 text-white px-4 py-2 rounded font-semibold transition-colors text-sm"
+                    >
+                      🔗 Save Live Link to Game
+                    </button>
+                    {getEmbedUrl(youtubeUrl) && (
+                      <div className="rounded-lg overflow-hidden border border-white/10 bg-black/40">
+                        <iframe
+                          src={getEmbedUrl(youtubeUrl)}
+                          title="Live Stream Preview"
+                          className="w-full aspect-video"
+                          allow="autoplay; encrypted-media; picture-in-picture"
+                          allowFullScreen
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <h3 className="text-xl font-bold text-white">Highlights ({highlights.length})</h3>
+                  <p className="text-xs text-gray-300 -mt-3">
+                    You are tagging highlights for <span className="text-orange-300 font-semibold">{selectedSeason}</span>.
+                  </p>
+                  
+                  <div className="space-y-3 bg-white/5 rounded-lg p-4">
+                    <div>
+                      <label className="block text-white font-medium mb-2 text-sm">Timestamp</label>
+                      <div className="flex gap-2">
+                        <select
+                          value={highlightQuarter}
+                          onChange={(e) => setHighlightQuarter(e.target.value)}
+                          className="px-2 py-2 bg-white/10 border border-white/20 rounded text-white focus:outline-none focus:border-orange-400 text-sm"
+                        >
+                          <option value="Q1">Q1</option>
+                          <option value="Q2">Q2</option>
+                          <option value="Q3">Q3</option>
+                          <option value="Q4">Q4</option>
+                          <option value="OT">OT</option>
+                        </select>
+                        <input
+                          type="text"
+                          value={highlightTime}
+                          onChange={(e) => setHighlightTime(e.target.value)}
+                          className="flex-1 px-3 py-2 bg-white/10 border border-white/20 rounded text-white placeholder-gray-400 focus:outline-none focus:border-orange-400 text-sm"
+                          placeholder="2:35"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="relative">
+                      <label className="block text-white font-medium mb-2 text-sm">Player</label>
+                      <input
+                        type="text"
+                        value={highlightPlayerSearch}
+                        onChange={(e) => { setHighlightPlayerSearch(e.target.value); setHighlightPlayerId(''); }}
+                        className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded text-white placeholder-gray-400 focus:outline-none focus:border-orange-400 text-sm"
+                        placeholder="Search player..."
+                      />
+                      {highlightPlayerSearch && !highlightPlayerId && (
+                        <div className="absolute z-10 w-full mt-1 bg-gray-800 border border-white/20 rounded max-h-36 overflow-y-auto">
+                          {players.filter(p => p.name?.toLowerCase().includes(highlightPlayerSearch.toLowerCase()) || p.id?.toLowerCase().includes(highlightPlayerSearch.toLowerCase())).map(p => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => { setHighlightPlayerId(p.id); setHighlightPlayerSearch(p.name || p.id); }}
+                              className="w-full text-left px-3 py-2 text-white hover:bg-white/10 text-sm"
+                            >
+                              {p.name || p.id} <span className="text-gray-400 text-xs">({p.team})</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-white font-medium mb-2 text-sm">Play Type</label>
+                      <select
+                        value={highlightType}
+                        onChange={(e) => setHighlightType(e.target.value)}
+                        className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded text-white focus:outline-none focus:border-orange-400 text-sm"
+                      >
+                        <option value="made-shot">Made Shot</option>
+                        <option value="blocked-shot">Blocked Shot</option>
+                        <option value="steal">Steal</option>
+                        <option value="assist">Assist</option>
+                        <option value="rebound">Rebound</option>
+                        <option value="dunk">Dunk</option>
+                        <option value="three-pointer">3-Pointer</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-white font-medium mb-2 text-sm">Description</label>
+                      <textarea
+                        value={highlightDescription}
+                        onChange={(e) => setHighlightDescription(e.target.value)}
+                        className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded text-white placeholder-gray-400 focus:outline-none focus:border-orange-400 text-sm h-20"
+                        placeholder="e.g., Alley-oop from X to Y"
+                      />
+                    </div>
+
+                    <button
+                      onClick={handleAddHighlight}
+                      className="w-full bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded font-semibold transition-colors text-sm"
+                    >
+                      + Add Highlight
+                    </button>
+                  </div>
+
+                  {/* Highlights List */}
+                  <div className="bg-white/5 rounded-lg p-3 max-h-48 overflow-y-auto space-y-2">
+                    {highlights.length > 0 ? (
+                      highlights.map((h, idx) => (
+                        <div key={idx} className="text-xs text-gray-300 border-b border-white/10 pb-2">
+                          <p className="font-semibold">{h.timestamp} - {h.type}</p>
+                          <p className="text-gray-400">{h.description}</p>
+                          <button
+                            onClick={() => setHighlights(highlights.filter((_, i) => i !== idx))}
+                            className="text-red-400 hover:text-red-300 text-xs mt-1"
+                          >
+                            remove
+                          </button>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-gray-500 text-xs">No highlights yet. Add them as you review.</p>
+                    )}
+                  </div>
+
+                  {/* Export Buttons */}
+                  <div className="space-y-2">
+                    <button
+                      onClick={handleExportData}
+                      disabled={shots.length === 0 && highlights.length === 0}
+                      className="w-full bg-green-500 hover:bg-green-600 disabled:bg-green-500/50 text-white px-4 py-2 rounded font-semibold transition-colors text-sm"
+                    >
+                      📥 Export CSVs
+                    </button>
+                    <button
+                      onClick={handleClearShots}
+                      className="w-full bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded font-semibold transition-colors text-sm"
+                    >
+                      🗑️ Clear All
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
         <div className="mt-8 grid md:grid-cols-2 gap-8">
           {['Golden Dragons', 'Los Sigmas'].map((teamName) => {
             const teamPlayers = players.filter((player: any) => player.team === teamName);

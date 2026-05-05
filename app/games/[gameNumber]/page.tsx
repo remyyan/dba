@@ -3,7 +3,7 @@
 import { notFound, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { getGame, calculatePlayerScore, CURRENT_SEASON } from "@/lib/firebase-data";
+import { getGame, calculatePlayerScore, loadGameShotData, CURRENT_SEASON, HighlightEntry } from "@/lib/firebase-data";
 import Navigation from "@/components/Navigation";
 
 const BADGE_DESCRIPTIONS: Record<string, string> = {
@@ -24,6 +24,9 @@ export default function GamePage({ params }: GamePageProps) {
   const seasonParam = searchParams.get('season') || CURRENT_SEASON;
   const [game, setGame] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [highlights, setHighlights] = useState<HighlightEntry[]>([]);
+  const [shots, setShots] = useState<any[]>([]);
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
 
   const getPlayerBadges = (stats: any) => {
     const badges: string[] = [];
@@ -67,6 +70,11 @@ export default function GamePage({ params }: GamePageProps) {
           }
         }
         setGame(gameData);
+        const shotData = await loadGameShotData(gameNum, seasonParam);
+        if (shotData) {
+          setHighlights(shotData.highlights);
+          setShots(shotData.shots);
+        }
       } catch (error) {
         console.error('Error loading game:', error);
         notFound();
@@ -92,6 +100,24 @@ export default function GamePage({ params }: GamePageProps) {
   if (!game) {
     notFound();
   }
+
+  const describeShotLabel = (shot: any): string => {
+    const ft = shot.distanceFt;
+    if (shot.type === '3P') {
+      if (ft >= 30) return `${ft}ft bomb`;
+      if (ft >= 27) return `${ft}ft deep three`;
+      return `${ft}ft three pointer`;
+    }
+    if (ft <= 3) return 'layup';
+    if (ft <= 6) return `${ft}ft floater`;
+    if (ft <= 10) return `${ft}ft short mid`;
+    return `${ft}ft midrange`;
+  };
+
+  const playerShotPlayByPlay = (playerId: string) =>
+    shots
+      .filter(s => s.playerId === playerId)
+      .map(s => ({ ...s, label: describeShotLabel(s) }));
 
   const formatPercentage = (value: number) => {
     if (!value || value === 0) return "0%";
@@ -179,6 +205,18 @@ export default function GamePage({ params }: GamePageProps) {
               }`}>
                 {game.team1Score > game.team2Score ? `${game.team1} Win` : `${game.team2} Win`}
               </p>
+              {game.liveStreamUrl && (
+                <div className="mt-4">
+                  <a
+                    href={game.liveStreamUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-semibold transition-colors"
+                  >
+                    🔴 Watch Live Stream
+                  </a>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -314,16 +352,25 @@ export default function GamePage({ params }: GamePageProps) {
               <tbody>
                 {game.team1Players.map((player: any) => {
                   const badges = getPlayerBadges(player);
-                  return (<tr key={player.playerName || player.name} className="border-b border-white/10">
+                  const pid = player.playerId;
+                  const isSelected = selectedPlayerId === pid;
+                  return (<tr key={player.playerName || player.name} className={`border-b border-white/10 transition-colors ${isSelected ? 'bg-orange-500/10' : ''}`}>
                     <td className="text-white font-semibold py-2">
                       <div>
-                        {player.playerId ? (
-                          <Link href={`/games/${game.gameNumber}/player/${player.playerId}?season=${encodeURIComponent(seasonParam)}`} className="hover:text-orange-400 transition-colors">
-                            {player.playerName || player.name}
-                          </Link>
-                        ) : (
-                          player.playerName || player.name
-                        )}
+                        <div className="flex items-center gap-2">
+                          {player.playerId ? (
+                            <Link href={`/games/${game.gameNumber}/player/${player.playerId}?season=${encodeURIComponent(seasonParam)}`} className="hover:text-orange-400 transition-colors">
+                              {player.playerName || player.name}
+                            </Link>
+                          ) : (
+                            player.playerName || player.name
+                          )}
+                          {pid && (
+                            <button onClick={() => setSelectedPlayerId(isSelected ? null : pid)} className="text-xs text-gray-500 hover:text-orange-400 transition-colors">
+                              {isSelected ? '▲' : '▼'}
+                            </button>
+                          )}
+                        </div>
                         {badges.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1">
                             {badges.map((badge: string) => (
@@ -379,6 +426,38 @@ export default function GamePage({ params }: GamePageProps) {
               )}
             </table>
           </div>
+          {selectedPlayerId && game.team1Players.some((p: any) => p.playerId === selectedPlayerId) && (() => {
+            const player = game.team1Players.find((p: any) => p.playerId === selectedPlayerId);
+            const playerShots = playerShotPlayByPlay(selectedPlayerId);
+            const playerHighlights = highlights.filter(h => h.playerId === selectedPlayerId);
+            return (
+              <div className="mt-4 border-t border-white/10 pt-4">
+                <h4 className="text-white font-bold mb-3">{player.playerName || player.name} — Shot Log</h4>
+                {playerShots.length === 0 && playerHighlights.length === 0 ? (
+                  <p className="text-gray-500 text-sm">No shot data tagged for this player.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {playerShots.map((s: any, i: number) => (
+                      <div key={i} className="flex items-center gap-3 text-sm">
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${s.made ? 'bg-green-400' : 'bg-red-400'}`} />
+                        <span className="text-gray-400 w-20 flex-shrink-0">{s.timestamp || '—'}</span>
+                        <span className={s.made ? 'text-green-300' : 'text-red-300'}>{s.made ? 'Made' : 'Miss'}</span>
+                        <span className="text-white">{s.label}</span>
+                      </div>
+                    ))}
+                    {playerHighlights.map((h: any, i: number) => (
+                      <div key={`h${i}`} className="flex items-center gap-3 text-sm">
+                        <span className="w-2 h-2 rounded-full flex-shrink-0 bg-orange-400" />
+                        <span className="text-gray-400 w-20 flex-shrink-0">{h.timestamp || '—'}</span>
+                        <span className="text-orange-300 capitalize">{h.type.replace(/-/g, ' ')}</span>
+                        <span className="text-white">{h.description}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Los Sigmas Box Score */}
@@ -416,16 +495,25 @@ export default function GamePage({ params }: GamePageProps) {
               <tbody>
                 {game.team2Players.map((player: any) => {
                   const badges = getPlayerBadges(player);
-                  return (<tr key={player.playerName || player.name} className="border-b border-white/10">
+                  const pid = player.playerId;
+                  const isSelected = selectedPlayerId === pid;
+                  return (<tr key={player.playerName || player.name} className={`border-b border-white/10 transition-colors ${isSelected ? 'bg-orange-500/10' : ''}`}>
                     <td className="text-white font-semibold py-2">
                       <div>
-                        {player.playerId ? (
-                          <Link href={`/games/${game.gameNumber}/player/${player.playerId}?season=${encodeURIComponent(seasonParam)}`} className="hover:text-orange-400 transition-colors">
-                            {player.playerName || player.name}
-                          </Link>
-                        ) : (
-                          player.playerName || player.name
-                        )}
+                        <div className="flex items-center gap-2">
+                          {player.playerId ? (
+                            <Link href={`/games/${game.gameNumber}/player/${player.playerId}?season=${encodeURIComponent(seasonParam)}`} className="hover:text-orange-400 transition-colors">
+                              {player.playerName || player.name}
+                            </Link>
+                          ) : (
+                            player.playerName || player.name
+                          )}
+                          {pid && (
+                            <button onClick={() => setSelectedPlayerId(isSelected ? null : pid)} className="text-xs text-gray-500 hover:text-orange-400 transition-colors">
+                              {isSelected ? '▲' : '▼'}
+                            </button>
+                          )}
+                        </div>
                         {badges.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1">
                             {badges.map((badge: string) => (
@@ -481,7 +569,63 @@ export default function GamePage({ params }: GamePageProps) {
               )}
             </table>
           </div>
+          {selectedPlayerId && game.team2Players.some((p: any) => p.playerId === selectedPlayerId) && (() => {
+            const player = game.team2Players.find((p: any) => p.playerId === selectedPlayerId);
+            const playerShots = playerShotPlayByPlay(selectedPlayerId);
+            const playerHighlights = highlights.filter(h => h.playerId === selectedPlayerId);
+            return (
+              <div className="mt-4 border-t border-white/10 pt-4">
+                <h4 className="text-white font-bold mb-3">{player.playerName || player.name} — Shot Log</h4>
+                {playerShots.length === 0 && playerHighlights.length === 0 ? (
+                  <p className="text-gray-500 text-sm">No shot data tagged for this player.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {playerShots.map((s: any, i: number) => (
+                      <div key={i} className="flex items-center gap-3 text-sm">
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${s.made ? 'bg-green-400' : 'bg-red-400'}`} />
+                        <span className="text-gray-400 w-20 flex-shrink-0">{s.timestamp || '—'}</span>
+                        <span className={s.made ? 'text-green-300' : 'text-red-300'}>{s.made ? 'Made' : 'Miss'}</span>
+                        <span className="text-white">{s.label}</span>
+                      </div>
+                    ))}
+                    {playerHighlights.map((h: any, i: number) => (
+                      <div key={`h${i}`} className="flex items-center gap-3 text-sm">
+                        <span className="w-2 h-2 rounded-full flex-shrink-0 bg-orange-400" />
+                        <span className="text-gray-400 w-20 flex-shrink-0">{h.timestamp || '—'}</span>
+                        <span className="text-orange-300 capitalize">{h.type.replace(/-/g, ' ')}</span>
+                        <span className="text-white">{h.description}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
+
+        {/* Highlights / Play-by-Play */}
+        {highlights.length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-2xl font-bold text-white mb-4">Highlights</h2>
+            <div className="space-y-3">
+              {highlights.map((h, idx) => (
+                <div key={idx} className="bg-white/5 border border-white/10 rounded-xl px-5 py-4 flex items-start gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3 mb-1 flex-wrap">
+                      <span className="text-orange-400 font-semibold text-sm">{h.timestamp}</span>
+                      <span className="text-white font-bold">{
+                        [...(game.team1Players || []), ...(game.team2Players || [])]
+                          .find((p: any) => p.playerId === h.playerId)?.playerName || h.playerId
+                      }</span>
+                      <span className="bg-orange-500/20 text-orange-300 text-xs px-2 py-0.5 rounded-full border border-orange-500/30 capitalize">{h.type.replace(/-/g, ' ')}</span>
+                    </div>
+                    <p className="text-gray-300 text-sm">{h.description}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Navigation */}
         <div className="text-center">
